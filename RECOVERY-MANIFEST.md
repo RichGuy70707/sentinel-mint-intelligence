@@ -119,3 +119,9 @@
 - OpenSea collection name/image used only when the lookup succeeds
 - Catalog persist bumped to v4 and rehydrates without protocol receipts
 - Trending ignores missing velocity instead of treating it as zero
+
+## Identity quality (2026-09-02)
+
+- OpenSea "Unidentified contract" and similar placeholders are not project names
+- Blockscout token metadata is a last-resort name source after NFT classification
+- Persisted placeholder names are rewritten to UNKNOWN PROJECT
