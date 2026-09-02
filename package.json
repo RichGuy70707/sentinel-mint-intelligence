@@ -16,7 +16,7 @@
     "preview:stop": "node scripts/preview.mjs stop",
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
-    "test": "node --experimental-strip-types --test src/core/address.test.ts src/core/time.test.ts src/core/filters.test.ts src/core/logic.test.ts src/core/terminal.test.ts src/providers/pool.test.ts src/providers/classify.test.ts src/providers/blockscout.test.ts src/providers/sanitize.test.ts src/providers/secrets.test.ts src/providers/key-pool.test.ts src/providers/opensea.test.ts src/eligibility/engine.test.ts src/discovery/noise.test.ts src/discovery/activity.test.ts src/discovery/token-class.test.ts src/discovery/mint-logs.test.ts src/stages/engine.test.ts src/transactions/builder.test.ts src/execution/state.test.ts src/simulation/engine.test.ts src/contracts/selectors.test.ts src/lib/app-data/app-data.test.ts src/lib/auth/gate-identity.test.ts",
+    "test": "node --experimental-strip-types --test src/core/address.test.ts src/core/time.test.ts src/core/filters.test.ts src/core/logic.test.ts src/core/terminal.test.ts src/providers/pool.test.ts src/providers/classify.test.ts src/providers/blockscout.test.ts src/providers/sanitize.test.ts src/providers/secrets.test.ts src/providers/key-pool.test.ts src/providers/opensea.test.ts src/eligibility/engine.test.ts src/discovery/noise.test.ts src/discovery/activity.test.ts src/discovery/token-class.test.ts src/discovery/mint-logs.test.ts src/stages/engine.test.ts src/transactions/builder.test.ts src/execution/state.test.ts src/simulation/engine.test.ts src/contracts/selectors.test.ts src/contracts/intelligence.test.ts src/lib/app-data/app-data.test.ts src/lib/auth/gate-identity.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

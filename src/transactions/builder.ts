@@ -20,7 +20,7 @@ export interface BuildMintInput {
 }
 
 export class PrepareError extends Error {
-  code: "PRICE_UNKNOWN" | "INTERFACE_UNKNOWN" | "INVALID";
+  code: "PRICE_UNKNOWN" | "INTERFACE_UNKNOWN" | "INVALID" | "ARGUMENTS_UNKNOWN" | "REQUIRES_PROOF" | "SALE_NOT_ACTIVE" | "SOLD_OUT";
   constructor(code: PrepareError["code"], message: string) {
     super(message);
     this.code = code;

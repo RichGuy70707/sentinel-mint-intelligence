@@ -376,6 +376,8 @@ async function enrichProject(p: ProjectModel): Promise<ProjectModel> {
       status: resolveMintStatus(stages, { minted, windowMints, supply }),
       deployer: sale.owner,
       saleSource: sale.source === "none" ? null : sale.source,
+      mintMethod: sale.seadrop ? "SeaDrop mintPublic" : null,
+      mintMethodEvidence: sale.seadrop ? "seadrop.getPublicDrop" : sale.source === "none" ? null : sale.source,
       market,
       riskFlags: [
         ...(intel.bytecodePresent ? [] : ["No bytecode"]),

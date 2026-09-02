@@ -215,6 +215,7 @@ export function ProjectPane({ project }: { project: ProjectModel | null }) {
         <KV k="Contract" v={project.contract ? shortAddress(project.contract, 5) : "UNKNOWN"} href={project.links[0]?.href} />
         <KV k="Deployer" v={project.deployer ? shortAddress(project.deployer, 5) : "UNKNOWN"} />
         <KV k="Type" v={project.contractType ?? "UNKNOWN"} />
+        <KV k="Mint" v={project.mintMethod ?? "UNKNOWN"} />
         <KV k="Stage" v={stage ? `${stage.label} · ${stagePhase(stage)}` : "UNKNOWN"} />
         <KV k="Window" v={`${formatWhen(stage?.startTime ?? null)} → ${formatWhen(stage?.endTime ?? null)}`} />
         <KV k="Source" v={`${project.provenance.source}`} />

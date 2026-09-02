@@ -138,6 +138,8 @@ export interface ProjectModel {
   market: MarketSnapshot | null;
   deployer: string | null;
   saleSource: string | null;
+  mintMethod?: string | null;
+  mintMethodEvidence?: string | null;
   provenance: Provenance;
 }
 

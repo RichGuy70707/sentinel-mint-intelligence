@@ -29,6 +29,12 @@ const MERKLE_ABI = [
   { type: "function", name: "allowListRoot", stateMutability: "view", inputs: [], outputs: [{ type: "bytes32" }] },
 ] as const satisfies Abi;
 
+const LIMIT_ABI = [
+  { type: "function", name: "maxPerWallet", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "maxMintPerWallet", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "walletLimit", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+] as const satisfies Abi;
+
 const OWNER_ABI = [
   { type: "function", name: "owner", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
 ] as const satisfies Abi;
@@ -121,6 +127,22 @@ export async function probeSale(chainKey: ChainKey, address: string): Promise<Sa
   }
 
   result.merkleRoot = await readMerklePresent(chainKey, address);
+
+  if (result.maxPerWallet == null) {
+    for (const fn of ["maxPerWallet", "maxMintPerWallet", "walletLimit"] as const) {
+      try {
+        const data = encodeCall(LIMIT_ABI, fn, []);
+        const raw = (await ethCall(chainKey, address, data)) as `0x${string}`;
+        const value = Number(decodeCall<bigint>(LIMIT_ABI, fn, raw));
+        if (Number.isFinite(value) && value > 0 && value <= 20) {
+          result.maxPerWallet = value;
+          break;
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
 
   try {
     const data = encodeCall(OWNER_ABI, "owner", []);
