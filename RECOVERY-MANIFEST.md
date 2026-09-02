@@ -112,3 +112,10 @@
 - Upcoming and ended sale windows cannot prepare
 - Injected account must match the named wallet
 - Missing receipts stay PENDING, never CONFIRMED
+
+## Data quality (2026-09-02)
+
+- minted > maxSupply drops the cap rather than showing an impossible fraction
+- OpenSea collection name/image used only when the lookup succeeds
+- Catalog persist bumped to v4 and rehydrates without protocol receipts
+- Trending ignores missing velocity instead of treating it as zero
