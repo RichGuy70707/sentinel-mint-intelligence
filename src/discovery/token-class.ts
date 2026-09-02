@@ -31,9 +31,10 @@ export function keepMintCandidate(input: {
   interfaces?: string[] | null;
   tokenType?: string | null;
   bytecodePresent?: boolean | null;
+  nftEventEvidence?: boolean;
 }): boolean {
   if (isFungibleToken(input)) return false;
-  const interfaces = input.interfaces ?? [];
-  if (interfaces.length > 0 && !isNftToken(input)) return false;
-  return true;
+  if (isNftToken(input)) return true;
+  if (input.nftEventEvidence) return true;
+  return false;
 }

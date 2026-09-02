@@ -17,6 +17,7 @@ describe("token standard classification", () => {
 
   it("does not classify by token name", () => {
     assert.equal(isFungibleToken({ contractType: "UNKNOWN_CONTRACT", interfaces: [] }), false);
-    assert.equal(keepMintCandidate({ contractType: "UNKNOWN_CONTRACT", interfaces: [] }), true);
+    assert.equal(keepMintCandidate({ contractType: "UNKNOWN_CONTRACT", interfaces: [] }), false);
+    assert.equal(keepMintCandidate({ contractType: "UNKNOWN_CONTRACT", nftEventEvidence: true }), true);
   });
 });

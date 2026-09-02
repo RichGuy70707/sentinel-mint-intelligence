@@ -1,4 +1,4 @@
-import { normalizeAddress, shortAddress } from "@/core/address";
+import { normalizeAddress } from "@/core/address";
 import type { ChainKey, ProjectModel, Provenance } from "@/core/types";
 import { CHAINS, TRANSFER_TOPIC, ZERO_TOPIC } from "@/chains/registry";
 import { inspectContract } from "@/contracts/inspect";
@@ -9,6 +9,7 @@ import { openSeaMarket } from "@/providers/opensea";
 import { ethBlockNumber, ethGetLogs, type LogEntry } from "@/providers/rpc";
 import { intelCache } from "@/providers/ttl-cache";
 import { deriveStagesFromIntel, resolveMintStatus } from "@/stages/engine";
+import { classifyTransferLog, ERC1155_TRANSFER_BATCH } from "./mint-logs";
 import { isFungibleToken, keepMintCandidate } from "./token-class";
 import { isProtocolReceiptNft, receiptLabel } from "./noise";
 import { dedupeMintLogs, saneSupply, velocityPerMin } from "./activity";
@@ -124,13 +125,27 @@ async function collectLogs(
       source: "alchemy_getAssetTransfers",
       logs: alchemy.transfers
         .filter((t) => t.rawContract?.address)
-        .map((t) => ({
-          address: t.rawContract!.address!,
-          topics: [TRANSFER_TOPIC, ZERO_TOPIC, t.to ? padTopic(t.to) : ZERO_TOPIC],
-          data: "0x",
-          blockNumber: t.blockNum ?? hex(latest),
-          transactionHash: t.hash ?? "0x",
-        })),
+        .map((t) => {
+          const tokenId = t.tokenId ?? t.erc721TokenId ?? "1";
+          let idTopic = `0x${"0".repeat(63)}1`;
+          try {
+            idTopic = `0x${BigInt(tokenId).toString(16).padStart(64, "0")}`;
+          } catch {
+            /* keep dummy indexed token id so the log stays ERC-721 shaped */
+          }
+          return {
+            address: t.rawContract!.address!,
+            topics:
+              t.category === "erc1155"
+                ? [ERC1155_TRANSFER_SINGLE, ZERO_TOPIC, ZERO_TOPIC, t.to ? padTopic(t.to) : ZERO_TOPIC]
+                : [TRANSFER_TOPIC, ZERO_TOPIC, t.to ? padTopic(t.to) : ZERO_TOPIC, idTopic],
+            data: t.erc1155Metadata?.[0]?.value
+              ? `0x${"0".repeat(64)}${BigInt(t.erc1155Metadata[0].value).toString(16).padStart(64, "0")}`
+              : "0x",
+            blockNumber: t.blockNum ?? hex(latest),
+            transactionHash: t.hash ?? "0x",
+          };
+        }),
     };
   }
 
@@ -152,10 +167,15 @@ async function collectLogs(
           toBlock: hex(r.b),
           topics: [ERC1155_TRANSFER_SINGLE, null, ZERO_TOPIC],
         }).catch(() => [] as LogEntry[]),
+        ethGetLogs(chainKey, {
+          fromBlock: hex(r.a),
+          toBlock: hex(r.b),
+          topics: [ERC1155_TRANSFER_BATCH, null, ZERO_TOPIC],
+        }).catch(() => [] as LogEntry[]),
       ]),
     ),
   );
-  const logs = settled.flatMap(([a, b]) => [...a, ...b]);
+  const logs = settled.flatMap(([a, b, c]) => [...a, ...b, ...c]);
   return { logs, source: logs.length ? "eth_getLogs" : "none" };
 }
 
@@ -174,13 +194,16 @@ interface Agg {
   name?: string;
   symbol?: string;
   supplyHint?: number | null;
+  standard?: "ERC-721" | "ERC-1155";
 }
 
 function aggregateLogs(chainKey: ChainKey, logs: LogEntry[], scannedAt: number): ProjectModel[] {
   const map = new Map<string, Agg>();
   for (const log of dedupeMintLogs(logs)) {
+    const classified = classifyTransferLog(log);
+    if (classified.kind !== "erc721" && classified.kind !== "erc1155") continue;
     const contract = normalizeAddress(log.address);
-    const to = topicAddress(log.topics[2] ?? log.topics[3]);
+    const to = classified.recipient;
     const current = map.get(contract) ?? {
       contract,
       chainKey,
@@ -189,8 +212,9 @@ function aggregateLogs(chainKey: ChainKey, logs: LogEntry[], scannedAt: number):
       lastTx: log.transactionHash,
       lastBlock: Number.parseInt(log.blockNumber, 16),
     };
-    current.mints += 1;
+    current.mints += classified.quantity;
     if (to) current.minters.add(to);
+    current.standard = classified.kind === "erc1155" ? "ERC-1155" : "ERC-721";
     current.lastTx = log.transactionHash;
     current.lastBlock = Number.parseInt(log.blockNumber, 16);
     map.set(contract, current);
@@ -205,6 +229,7 @@ function aggregateBlockscout(chainKey: ChainKey, items: BlockscoutTransfer[], sc
     const raw = tokenAddress(item);
     if (!raw) continue;
     if (isFungibleToken({ tokenType: item.token?.type ?? null })) continue;
+    if (item.token?.type && !/ERC-?721|ERC-?1155/i.test(item.token.type)) continue;
     const contract = normalizeAddress(raw);
     const to = item.to?.hash ? normalizeAddress(item.to.hash) : null;
     const current = map.get(contract) ?? {
@@ -217,6 +242,7 @@ function aggregateBlockscout(chainKey: ChainKey, items: BlockscoutTransfer[], sc
       name: item.token?.name ?? undefined,
       symbol: item.token?.symbol ?? undefined,
       supplyHint: item.token?.total_supply ? Number(item.token.total_supply) : null,
+      standard: /1155/.test(item.token?.type ?? "") ? "ERC-1155" : "ERC-721",
     };
     current.mints += 1;
     if (to) current.minters.add(to);
@@ -272,7 +298,7 @@ function projectFromAgg(agg: Agg, scannedAt: number, windowMin: number | null, n
     id: `${agg.chainKey}:${agg.contract}`,
     chainKey: agg.chainKey,
     chainId: CHAINS[agg.chainKey].id,
-    name: agg.name?.trim() || shortAddress(agg.contract, 5),
+    name: agg.name?.trim() && !looksLikeAddress(agg.name) ? agg.name.trim() : "UNKNOWN PROJECT",
     symbol: agg.symbol?.trim() || "UNK",
     contract: agg.contract,
     collectionSlug: null,
@@ -290,10 +316,10 @@ function projectFromAgg(agg: Agg, scannedAt: number, windowMin: number | null, n
     lastActivityAt: scannedAt,
     mintVelocityPerMin: velocityPerMin(agg.mints, windowMin),
     uniqueMinters: agg.minters.size,
-    verifiedSource: false,
+    verifiedSource: Boolean(agg.standard),
     bytecodePresent: null,
-    contractType: null,
-    interfaces: [],
+    contractType: agg.standard ?? null,
+    interfaces: agg.standard === "ERC-1155" ? ["ERC1155"] : agg.standard === "ERC-721" ? ["ERC721"] : [],
     riskFlags: receiptLabel(agg) ? [`Protocol receipt: ${receiptLabel(agg)}`] : ["Metadata pending inspect"],
     market: null,
     deployer: null,
@@ -335,7 +361,7 @@ async function enrichProject(p: ProjectModel): Promise<ProjectModel> {
     const supply = saneSupply(intel.maxSupply ? Number(intel.maxSupply) : p.supply);
     return {
       ...p,
-      name: intel.name || alchemy.name || p.name,
+      name: pickProjectName(intel.name, alchemy.name, p.name),
       symbol: intel.symbol || alchemy.symbol || p.symbol,
       supply,
       remaining: supply != null && minted != null ? Math.max(0, supply - minted) : null,
@@ -370,7 +396,16 @@ function keepDiscovered(p: ProjectModel): boolean {
   return keepMintCandidate({
     contractType: p.contractType,
     interfaces: p.interfaces,
+    nftEventEvidence: p.verifiedSource || p.interfaces.includes("ERC721") || p.interfaces.includes("ERC1155"),
   });
+}
+
+function pickProjectName(...names: Array<string | null | undefined>): string {
+  for (const name of names) {
+    const trimmed = name?.trim();
+    if (trimmed && !looksLikeAddress(trimmed) && trimmed !== "UNKNOWN PROJECT") return trimmed;
+  }
+  return "UNKNOWN PROJECT";
 }
 
 function hex(n: number): string {
@@ -393,17 +428,12 @@ function withBudget<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T>
   });
 }
 
-function topicAddress(topic?: string): string | null {
-  if (!topic || topic.length < 66) return null;
-  return normalizeAddress(`0x${topic.slice(26)}`);
-}
-
 export async function inspectAsProject(chainKey: ChainKey, address: string): Promise<ProjectModel> {
   const base: ProjectModel = {
     id: `${chainKey}:${normalizeAddress(address)}`,
     chainKey,
     chainId: CHAINS[chainKey].id,
-    name: shortAddress(address),
+    name: "UNKNOWN PROJECT",
     symbol: "UNK",
     contract: normalizeAddress(address),
     collectionSlug: null,

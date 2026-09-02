@@ -9,6 +9,9 @@ interface Transfer {
   hash?: string;
   blockNum?: string;
   category?: string;
+  tokenId?: string;
+  erc721TokenId?: string;
+  erc1155Metadata?: { value?: string }[];
 }
 
 export async function alchemyMintTransfers(

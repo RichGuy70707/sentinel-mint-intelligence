@@ -22,6 +22,12 @@ export function openSeaPoolSnapshot() {
   return getOpenSeaPool().snapshot();
 }
 
+export function openSeaLookupKind(status: number): "retry" | "not_found" | "other" {
+  if (status === 401 || status === 403 || status === 429 || status >= 500) return "retry";
+  if (status === 404) return "not_found";
+  return "other";
+}
+
 export async function openSeaMarket(chainKey: ChainKey, address: string): Promise<MarketSnapshot | null> {
   const chain = CHAIN[chainKey];
   const pool = getOpenSeaPool();
@@ -31,7 +37,8 @@ export async function openSeaMarket(chainKey: ChainKey, address: string): Promis
       const res = await fetch(`https://api.opensea.io/api/v2/chain/${chain}/contract/${address}`, {
         headers: { accept: "application/json", "x-api-key": key },
       });
-      if (isRetryableProviderStatus(res.status)) throw new Error(`OpenSea HTTP ${res.status}`);
+      if (openSeaLookupKind(res.status) === "retry") throw new Error(`OpenSea HTTP ${res.status}`);
+      if (openSeaLookupKind(res.status) === "not_found") return empty("UNKNOWN", "OpenSea collection not found");
       if (!res.ok) {
         return empty("UNKNOWN", `OpenSea contract lookup ${res.status}`);
       }
