@@ -124,6 +124,8 @@ export interface ProjectModel {
   remaining: number | null;
   minted: number | null;
   windowMints?: number | null;
+  mintTxCount?: number | null;
+  activityKind?: "NORMAL" | "BULK" | "UNKNOWN" | null;
   priceWei: string | null;
   status: MintStatus;
   detectedAt: number;

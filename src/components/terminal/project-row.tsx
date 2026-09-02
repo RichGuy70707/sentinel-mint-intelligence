@@ -48,6 +48,7 @@ export function ProjectRow({
         <span>{formatInt(project.minted)}</span>
         <span>{project.windowMints == null ? "—" : `+${formatInt(project.windowMints)}`}</span>
         <span>{project.mintVelocityPerMin == null ? "—" : `${project.mintVelocityPerMin}/m`}</span>
+        {project.activityKind === "BULK" ? <span className="text-warn">BULK</span> : null}
       </div>
       {rows.length > 0 && (
         <div className="mt-0.5 flex flex-wrap gap-x-2">

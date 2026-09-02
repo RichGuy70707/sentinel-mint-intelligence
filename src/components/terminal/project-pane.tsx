@@ -238,6 +238,8 @@ export function ProjectPane({ project }: { project: ProjectModel | null }) {
         <KV k="Window" v={`${formatWhen(stage?.startTime ?? null)} → ${formatWhen(stage?.endTime ?? null)}`} />
         <KV k="Cap" v={supply != null ? formatInt(supply) : "UNKNOWN"} />
         <KV k="Activity" v={project.windowMints != null ? `+${formatInt(project.windowMints)}` : "—"} />
+        <KV k="Txs" v={project.mintTxCount != null ? formatInt(project.mintTxCount) : "—"} />
+        <KV k="Signal" v={project.activityKind ?? "UNKNOWN"} />
       </div>
 
       <div className="grid grid-cols-3 gap-x-4 border-b border-line px-3 py-2 text-[11px]">

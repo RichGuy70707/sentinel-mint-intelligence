@@ -4,6 +4,7 @@ import { ProjectPane } from "@/components/terminal/project-pane";
 import { ProjectRow } from "@/components/terminal/project-row";
 import { applyFilters, DEFAULT_FILTERS } from "@/core/filters";
 import { boardEmptyCopy, compactChainErrors } from "@/core/terminal";
+import { trendScore } from "@/discovery/activity-kind";
 import type { ProjectModel } from "@/core/types";
 import { evaluateProjectWallets } from "@/eligibility/engine";
 import { formatInt } from "@/lib/format";
@@ -72,7 +73,7 @@ export function DiscoveryBoard({ mode }: { mode: BoardMode }) {
 
   const left = useMemo(() => sortForMode(filtered, mode), [filtered, mode]);
   const selected = left.find((p) => p.id === selectedId) ?? left[0] ?? null;
-  const trending = [...filtered].sort((a, b) => (b.mintVelocityPerMin ?? -1) - (a.mintVelocityPerMin ?? -1)).slice(0, 10);
+  const trending = [...filtered].sort((a, b) => trendScoreFor(b) - trendScoreFor(a)).slice(0, 10);
   const fresh = [...filtered].sort((a, b) => (b.detectedAt ?? 0) - (a.detectedAt ?? 0)).slice(0, 10);
   const runners = [...filtered]
     .sort((a, b) => runnerScore(b) - runnerScore(a))
@@ -178,10 +179,10 @@ function sortForMode(projects: ProjectModel[], mode: BoardMode): ProjectModel[] 
   if (mode === "upcoming") {
     return copy.sort((a, b) => statusRank(a.status) - statusRank(b.status) || (b.detectedAt ?? 0) - (a.detectedAt ?? 0));
   }
-  if (mode === "trending") return copy.sort((a, b) => (b.mintVelocityPerMin ?? 0) - (a.mintVelocityPerMin ?? 0));
+  if (mode === "trending") return copy.sort((a, b) => trendScoreFor(b) - trendScoreFor(a));
   if (mode === "new") return copy.sort((a, b) => (b.detectedAt ?? 0) - (a.detectedAt ?? 0));
   if (mode === "runners") return copy.sort((a, b) => runnerScore(b) - runnerScore(a));
-  return copy.sort((a, b) => statusRank(a.status) - statusRank(b.status) || (b.mintVelocityPerMin ?? 0) - (a.mintVelocityPerMin ?? 0));
+  return copy.sort((a, b) => statusRank(a.status) - statusRank(b.status) || trendScoreFor(b) - trendScoreFor(a));
 }
 
 function statusRank(status: ProjectModel["status"]): number {
@@ -191,8 +192,16 @@ function statusRank(status: ProjectModel["status"]): number {
   return 3;
 }
 
+function trendScoreFor(p: ProjectModel): number {
+  return trendScore({
+    velocity: p.mintVelocityPerMin,
+    uniqueMinters: p.uniqueMinters,
+    activityKind: p.activityKind,
+  });
+}
+
 function runnerScore(p: ProjectModel): number {
-  return (p.mintVelocityPerMin ?? 0) * (p.uniqueMinters ?? 0);
+  return trendScoreFor(p);
 }
 
 function velocityPerSec(projects: ProjectModel[]): string {

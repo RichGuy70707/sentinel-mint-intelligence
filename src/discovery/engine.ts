@@ -12,6 +12,7 @@ import { deriveStagesFromIntel, resolveMintStatus } from "@/stages/engine";
 import { classifyTransferLog, ERC1155_TRANSFER_BATCH } from "./mint-logs";
 import { isFungibleToken, keepMintCandidate } from "./token-class";
 import { isProtocolReceiptNft, receiptLabel } from "./noise";
+import { classifyActivity } from "./activity-kind";
 import { preferName, splitMintStats } from "./quality";
 import { dedupeMintLogs, saneSupply, velocityPerMin } from "./activity";
 
@@ -190,6 +191,7 @@ interface Agg {
   chainKey: ChainKey;
   mints: number;
   minters: Set<string>;
+  txs: Set<string>;
   lastTx: string;
   lastBlock: number;
   name?: string;
@@ -210,11 +212,13 @@ function aggregateLogs(chainKey: ChainKey, logs: LogEntry[], scannedAt: number):
       chainKey,
       mints: 0,
       minters: new Set<string>(),
+      txs: new Set<string>(),
       lastTx: log.transactionHash,
       lastBlock: Number.parseInt(log.blockNumber, 16),
     };
     current.mints += classified.quantity;
     if (to) current.minters.add(to);
+    if (log.transactionHash) current.txs.add(log.transactionHash.toLowerCase());
     current.standard = classified.kind === "erc1155" ? "ERC-1155" : "ERC-721";
     current.lastTx = log.transactionHash;
     current.lastBlock = Number.parseInt(log.blockNumber, 16);
@@ -238,6 +242,7 @@ function aggregateBlockscout(chainKey: ChainKey, items: BlockscoutTransfer[], sc
       chainKey,
       mints: 0,
       minters: new Set<string>(),
+      txs: new Set<string>(),
       lastTx: item.transaction_hash ?? "0x",
       lastBlock: item.block_number ?? 0,
       name: item.token?.name ?? undefined,
@@ -247,6 +252,7 @@ function aggregateBlockscout(chainKey: ChainKey, items: BlockscoutTransfer[], sc
     };
     current.mints += 1;
     if (to) current.minters.add(to);
+    if (item.transaction_hash) current.txs.add(item.transaction_hash.toLowerCase());
     if (item.transaction_hash) current.lastTx = item.transaction_hash;
     if (item.block_number) current.lastBlock = item.block_number;
     map.set(contract, current);
@@ -270,6 +276,7 @@ function mergeProjects(a: ProjectModel[], b: ProjectModel[]): ProjectModel[] {
       symbol: prev.symbol === "UNK" ? p.symbol : prev.symbol,
       minted: prev.minted ?? p.minted,
       windowMints: Math.max(prev.windowMints ?? 0, p.windowMints ?? 0) || (prev.windowMints ?? p.windowMints),
+      mintTxCount: Math.max(prev.mintTxCount ?? 0, p.mintTxCount ?? 0) || (prev.mintTxCount ?? p.mintTxCount),
       uniqueMinters: Math.max(prev.uniqueMinters ?? 0, p.uniqueMinters ?? 0),
       mintVelocityPerMin:
         prev.mintVelocityPerMin == null
@@ -278,6 +285,12 @@ function mergeProjects(a: ProjectModel[], b: ProjectModel[]): ProjectModel[] {
             ? prev.mintVelocityPerMin
             : Math.max(prev.mintVelocityPerMin, p.mintVelocityPerMin),
       supply: prev.supply ?? p.supply,
+    });
+    const next = map.get(p.id)!;
+    next.activityKind = classifyActivity({
+      windowMints: next.windowMints ?? null,
+      uniqueMinters: next.uniqueMinters,
+      mintTxCount: next.mintTxCount ?? null,
     });
   }
   return [...map.values()];
@@ -313,6 +326,12 @@ function projectFromAgg(agg: Agg, scannedAt: number, windowMin: number | null, n
     remaining: null,
     minted: null,
     windowMints: agg.mints,
+    mintTxCount: agg.txs.size,
+    activityKind: classifyActivity({
+      windowMints: agg.mints,
+      uniqueMinters: agg.minters.size,
+      mintTxCount: agg.txs.size,
+    }),
     priceWei: null,
     status: "UNKNOWN",
     detectedAt: scannedAt,
