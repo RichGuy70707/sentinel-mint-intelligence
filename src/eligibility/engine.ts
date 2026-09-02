@@ -75,6 +75,16 @@ export function evaluateWalletStage(
         requiresVerification: true,
       };
     case "NFT_GATED":
+      if (!stage.gateContract) {
+        return {
+          ...base,
+          status: "REQUIRES_VERIFICATION",
+          reason: "NFT gate collection is not evidenced. Collection balanceOf is not sufficient.",
+          confidence: "NONE",
+          evidence: "UNKNOWN",
+          requiresVerification: true,
+        };
+      }
       if (hints.nftBalance == null) {
         return {
           ...base,

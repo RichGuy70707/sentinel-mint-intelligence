@@ -1,8 +1,10 @@
 import { encodeFunctionData } from "viem";
-import { isHexAddress, normalizeAddress } from "@/core/address";
-import type { CanonicalTx, ChainKey, Confidence } from "@/core/types";
-import { CHAINS } from "@/chains/registry";
-import { COMMON_MINT_ABI } from "@/contracts/abi";
+import { isHexAddress, normalizeAddress } from "../core/address.ts";
+import type { CanonicalTx, ChainKey } from "../core/types.ts";
+import { CHAINS } from "../chains/registry.ts";
+import { COMMON_MINT_ABI } from "../contracts/abi.ts";
+
+export const SEADROP_ADDRESS = "0x00005ea00ac477b1030ce78506496e8c2de24bf5";
 
 export type MintFn = "mint" | "publicMint" | "mintPublic";
 
@@ -14,6 +16,16 @@ export interface BuildMintInput {
   priceWeiPerMint: string | null;
   fn?: MintFn;
   source?: string;
+  seadrop?: boolean;
+}
+
+export class PrepareError extends Error {
+  code: "PRICE_UNKNOWN" | "INTERFACE_UNKNOWN" | "INVALID";
+  constructor(code: PrepareError["code"], message: string) {
+    super(message);
+    this.code = code;
+    this.name = "PrepareError";
+  }
 }
 
 export function validateBuildInput(input: BuildMintInput): string[] {
@@ -36,16 +48,24 @@ export function validateBuildInput(input: BuildMintInput): string[] {
 
 export function buildMintTransaction(input: BuildMintInput): CanonicalTx {
   const errors = validateBuildInput(input);
-  if (errors.length) throw new Error(errors.join("; "));
-  const fn = input.fn ?? "mint";
+  if (errors.length) throw new PrepareError("INVALID", errors.join("; "));
+  if (input.priceWeiPerMint == null) {
+    throw new PrepareError("PRICE_UNKNOWN", "Mint price is unread. Refusing to encode value 0.");
+  }
+  if (input.seadrop) return buildSeadropTx(input);
+  if (!input.fn) {
+    throw new PrepareError(
+      "INTERFACE_UNKNOWN",
+      "Mint selector is not evidenced. Refusing to assume mint().",
+    );
+  }
   const data = encodeFunctionData({
     abi: COMMON_MINT_ABI,
-    functionName: fn,
+    functionName: input.fn,
     args: [BigInt(input.quantity)],
   });
-  const unit = BigInt(input.priceWeiPerMint ?? "0");
+  const unit = BigInt(input.priceWeiPerMint);
   const value = (unit * BigInt(input.quantity)).toString();
-  const confidence: Confidence = input.fn ? "MEDIUM" : "LOW";
   return {
     to: normalizeAddress(input.contract),
     data,
@@ -54,9 +74,48 @@ export function buildMintTransaction(input: BuildMintInput): CanonicalTx {
     contract: normalizeAddress(input.contract),
     wallet: normalizeAddress(input.wallet),
     quantity: input.quantity,
-    source: input.source ?? "direct-contract",
+    source: input.source ?? `direct-contract.${input.fn}`,
     timestamp: Date.now(),
-    confidence,
+    confidence: "MEDIUM",
+  };
+}
+
+function buildSeadropTx(input: BuildMintInput): CanonicalTx {
+  const data = encodeFunctionData({
+    abi: [
+      {
+        type: "function",
+        name: "mintPublic",
+        stateMutability: "payable",
+        inputs: [
+          { name: "nftContract", type: "address" },
+          { name: "feeRecipient", type: "address" },
+          { name: "minterIfNotPayer", type: "address" },
+          { name: "quantity", type: "uint256" },
+        ],
+        outputs: [],
+      },
+    ],
+    functionName: "mintPublic",
+    args: [
+      input.contract as `0x${string}`,
+      "0x0000000000000000000000000000000000000000",
+      input.wallet as `0x${string}`,
+      BigInt(input.quantity),
+    ],
+  });
+  const unit = BigInt(input.priceWeiPerMint ?? "0");
+  return {
+    to: SEADROP_ADDRESS,
+    data,
+    value: (unit * BigInt(input.quantity)).toString(),
+    chainId: CHAINS[input.chainKey].id,
+    contract: SEADROP_ADDRESS,
+    wallet: normalizeAddress(input.wallet),
+    quantity: input.quantity,
+    source: "seadrop.mintPublic",
+    timestamp: Date.now(),
+    confidence: "HIGH",
   };
 }
 
@@ -82,7 +141,11 @@ export function normalizeExternalTx(raw: Record<string, unknown>, fallback: Part
 
 export function assertSafeTx(tx: CanonicalTx) {
   if (!isHexAddress(tx.to)) throw new Error("Unsafe destination");
-  if (tx.to !== tx.contract) throw new Error("Destination does not match contract");
+  if (tx.source.startsWith("seadrop")) {
+    if (tx.to !== SEADROP_ADDRESS) throw new Error("SeaDrop destination mismatch");
+  } else if (tx.to !== tx.contract) {
+    throw new Error("Destination does not match contract");
+  }
   if (!tx.data.startsWith("0x") || tx.data.length < 10) throw new Error("Calldata too short");
   if (!Number.isFinite(tx.chainId) || tx.chainId <= 0) throw new Error("Invalid chainId");
   if (tx.quantity < 1) throw new Error("Invalid quantity");

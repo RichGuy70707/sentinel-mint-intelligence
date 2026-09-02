@@ -47,8 +47,8 @@ describe("eligibility", () => {
   });
 
   it("uses on-chain gate balances when provided", () => {
-    const yes = evaluateWalletStage(wallet, project, stage({ kind: "NFT_GATED" }), { nftBalance: 2 });
-    const no = evaluateWalletStage(wallet, project, stage({ kind: "NFT_GATED" }), { nftBalance: 0 });
+    const yes = evaluateWalletStage(wallet, project, stage({ kind: "NFT_GATED", gateContract: "0x3333333333333333333333333333333333333333" }), { nftBalance: 2 });
+    const no = evaluateWalletStage(wallet, project, stage({ kind: "NFT_GATED", gateContract: "0x3333333333333333333333333333333333333333" }), { nftBalance: 0 });
     assert.equal(yes.status, "ELIGIBLE");
     assert.equal(no.status, "NOT_ELIGIBLE");
   });
@@ -57,6 +57,11 @@ describe("eligibility", () => {
     const r = evaluateWalletStage(wallet, project, stage({ maxPerWallet: 1 }), { nftBalance: 1 });
     assert.equal(r.status, "NOT_ELIGIBLE");
     assert.match(r.reason, /cap/);
+  });
+
+  it("does not treat collection balance as an unevidenced NFT gate", () => {
+    const r = evaluateWalletStage(wallet, project, stage({ kind: "NFT_GATED" }), { nftBalance: 4 });
+    assert.equal(r.status, "REQUIRES_VERIFICATION");
   });
 
   it("does not invent merkle proofs for WL / presale labels", () => {

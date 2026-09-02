@@ -1,4 +1,4 @@
-import type { ChainDescriptor, ChainKey } from "@/core/types";
+import type { ChainDescriptor, ChainKey } from "../core/types.ts";
 
 export const CHAINS: Record<ChainKey, ChainDescriptor> = {
   eth: {

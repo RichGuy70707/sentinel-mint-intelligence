@@ -1,5 +1,6 @@
 import type { ChainKey, ProviderHealthState, ProviderSnapshot } from "@/core/types";
 import { alchemyHttpUrl } from "./secrets.ts";
+import { sanitizeProviderText, sanitizeProviderUrl } from "./sanitize.ts";
 
 export interface ProviderConfig {
   id: string;
@@ -48,10 +49,10 @@ export class ProviderPool {
       return {
         id: c.id,
         chainKey: c.chainKey,
-        url: redactUrl(c.url),
+        url: sanitizeProviderUrl(c.url),
         state: classify(s),
         latencyMs: s.lastLatencyMs,
-        lastError: s.lastError,
+        lastError: sanitizeProviderText(s.lastError),
         lastSuccessAt: s.lastSuccessAt,
         failures: s.failures,
       };
@@ -155,15 +156,6 @@ function classify(s: InternalState): ProviderHealthState {
   if ((s.lastLatencyMs ?? 0) >= DEGRADED_LATENCY) return "DEGRADED";
   if (s.lastSuccessAt) return "HEALTHY";
   return "RECOVERING";
-}
-
-function redactUrl(url: string): string {
-  try {
-    const u = new URL(url);
-    return `${u.protocol}//${u.host}${u.pathname}`;
-  } catch {
-    return url;
-  }
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {

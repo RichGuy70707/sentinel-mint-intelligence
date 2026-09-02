@@ -4,6 +4,7 @@ import { ReadyBadge } from "@/components/badges";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/primitives";
 import { CHAINS } from "@/chains/registry";
+import { applyAuthorizeEvent, canAuthorize, isUserRejection } from "@/execution/state";
 import { useCatalog } from "@/state/catalog";
 import { useQueue } from "@/state/queue";
 import { useWallets } from "@/state/wallets";
@@ -22,18 +23,34 @@ function ExecutionPage() {
     const item = useQueue.getState().items.find((i) => i.id === id);
     if (!item?.preparedTx) {
       setMsg("Prepare a transaction first.");
+      patch(id, { status: "PREPARATION_FAILED" });
       return;
     }
+    if (!canAuthorize(item.status)) {
+      setMsg(`Cannot authorize from status ${item.status}.`);
+      return;
+    }
+    const named = wallets.find((w) => w.id === item.walletId);
     const eth = (window as unknown as { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum;
     if (!eth) {
-      setMsg("No injected wallet. Copy the prepared calldata from the row and sign in your own signer. SENTINEL will not hold keys.");
-      patch(id, { status: "AUTHORIZED" });
+      patch(id, { status: applyAuthorizeEvent(item.status, { type: "NO_INJECTED_WALLET" }) });
+      setMsg("No injected wallet. SENTINEL will not stamp AUTHORIZED without a signature.");
       return;
     }
+    patch(id, { status: "AWAITING_WALLET" });
     try {
       const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[];
       const from = accounts[0];
-      if (!from) throw new Error("No account authorized");
+      if (!from) {
+        patch(id, { status: applyAuthorizeEvent(item.status, { type: "NO_INJECTED_WALLET" }) });
+        setMsg("Wallet connected but no account was returned.");
+        return;
+      }
+      if (named && from.toLowerCase() !== named.address.toLowerCase()) {
+        patch(id, { status: applyAuthorizeEvent(item.status, { type: "SIGN_FAILED", message: "mismatch" }) });
+        setMsg("Injected account does not match the named wallet.");
+        return;
+      }
       const tx = item.preparedTx;
       const hash = (await eth.request({
         method: "eth_sendTransaction",
@@ -47,11 +64,16 @@ function ExecutionPage() {
           },
         ],
       })) as string;
-      patch(id, { status: "BROADCAST", txHash: hash });
-      setMsg(`Broadcast ${hash}`);
+      patch(id, { status: applyAuthorizeEvent(item.status, { type: "SIGNED_AND_BROADCAST", txHash: hash }), txHash: hash });
+      setMsg(`Submitted ${hash}`);
     } catch (err) {
-      patch(id, { status: "FAILED" });
-      setMsg(err instanceof Error ? err.message : "Authorization failed");
+      if (isUserRejection(err)) {
+        patch(id, { status: applyAuthorizeEvent(item.status, { type: "USER_REJECTED" }) });
+        setMsg("User rejected the signature request.");
+        return;
+      }
+      patch(id, { status: applyAuthorizeEvent(item.status, { type: "SIGN_FAILED" }) });
+      setMsg(err instanceof Error ? err.message : "Signing failed");
     }
   }
 
@@ -60,7 +82,7 @@ function ExecutionPage() {
       <PageHeader kicker="Queue" title="Execution center" />
       <p className="mb-4 text-sm text-muted">
         Prepare and simulate as much as possible before a stage opens. Broadcast only happens after you authorize it in
-        a wallet you control.
+        a wallet you control. AUTHORIZED is not a SENTINEL state — submission requires a signature.
       </p>
       {msg && <p className="mb-3 text-sm text-warn">{msg}</p>}
       {items.length === 0 ? (
@@ -94,9 +116,9 @@ function ExecutionPage() {
                     <td className="px-3 py-2">
                       {item.simulation ? <ReadyBadge status={item.simulation.status} /> : "—"}
                     </td>
-                    <td className="px-3 py-2">{item.status}</td>
+                    <td className="px-3 py-2">{item.status.replaceAll("_", " ")}</td>
                     <td className="px-3 py-2 text-right">
-                      <Button variant="ghost" onClick={() => void authorize(item.id)}>
+                      <Button variant="ghost" onClick={() => void authorize(item.id)} disabled={!canAuthorize(item.status)}>
                         Authorize
                       </Button>
                       <Button variant="quiet" onClick={() => remove(item.id)}>

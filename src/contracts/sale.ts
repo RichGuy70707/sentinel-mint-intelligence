@@ -43,6 +43,7 @@ export interface SaleIntel {
   endTime: number | null;
   seadrop: boolean;
   merkleRoot: boolean;
+  restrictFeeRecipients?: boolean;
   owner: string | null;
   source: string;
 }
@@ -55,6 +56,7 @@ export async function probeSale(chainKey: ChainKey, address: string): Promise<Sa
     endTime: null,
     seadrop: false,
     merkleRoot: false,
+    restrictFeeRecipients: false,
     owner: null,
     source: "none",
   };
@@ -71,6 +73,7 @@ export async function probeSale(chainKey: ChainKey, address: string): Promise<Sa
       startTime: bigint;
       endTime: bigint;
       maxTotalMintableByWallet: number;
+      restrictFeeRecipients?: boolean;
     }>(SEADROP_ABI, "getPublicDrop", raw);
     const configured = Boolean(drop && (drop.startTime > 0n || drop.endTime > 0n));
     if (drop && configured) {
@@ -79,6 +82,7 @@ export async function probeSale(chainKey: ChainKey, address: string): Promise<Sa
       result.startTime = normalizeTimestamp(Number(drop.startTime) * 1000);
       result.endTime = normalizeTimestamp(Number(drop.endTime) * 1000);
       result.maxPerWallet = Number(drop.maxTotalMintableByWallet);
+      result.restrictFeeRecipients = Boolean(drop.restrictFeeRecipients);
       result.source = "seadrop.getPublicDrop";
     }
   } catch {

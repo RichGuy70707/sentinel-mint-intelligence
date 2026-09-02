@@ -1,7 +1,10 @@
-import type { CanonicalTx, ChainKey, ReadinessStatus, SimulationResult } from "@/core/types";
+import type { CanonicalTx, ChainKey, ReadinessStatus, SimulationKind, SimulationResult } from "@/core/types";
 import { CHAINS, chainById } from "@/chains/registry";
 import { ethCall, ethEstimateGas, ethGasPrice, ethGetBalance, ethGetCode } from "@/providers/rpc";
 import { assertSafeTx } from "@/transactions/builder";
+import { classifySimFailure } from "./classify";
+
+export { classifySimFailure } from "./classify";
 
 export async function simulateTransaction(chainKey: ChainKey, tx: CanonicalTx): Promise<SimulationResult> {
   const checks: SimulationResult["checks"] = [];
@@ -10,16 +13,7 @@ export async function simulateTransaction(chainKey: ChainKey, tx: CanonicalTx): 
     assertSafeTx(tx);
     checks.push({ name: "tx-shape", ok: true, detail: "Canonical transaction passed validation" });
   } catch (err) {
-    return {
-      status: "NOT_READY",
-      explanation: err instanceof Error ? err.message : "Invalid transaction",
-      gasEstimate: null,
-      feeWei: null,
-      balanceWei: null,
-      revertData: null,
-      checks: [{ name: "tx-shape", ok: false, detail: String(err) }],
-      timestamp,
-    };
+    return fail("NOT_READY", "SIMULATION_UNAVAILABLE", err instanceof Error ? err.message : "Invalid transaction", checks, timestamp);
   }
 
   const expected = CHAINS[chainKey];
@@ -29,7 +23,7 @@ export async function simulateTransaction(chainKey: ChainKey, tx: CanonicalTx): 
       ok: false,
       detail: `Transaction chainId ${tx.chainId} does not match ${expected.name}`,
     });
-    return fail("NOT_READY", "Chain mismatch", checks, timestamp);
+    return fail("NOT_READY", "SIMULATION_UNAVAILABLE", "Chain mismatch", checks, timestamp);
   }
   checks.push({ name: "chain", ok: true, detail: expected.name });
 
@@ -37,8 +31,9 @@ export async function simulateTransaction(chainKey: ChainKey, tx: CanonicalTx): 
   try {
     bytecode = await ethGetCode(chainKey, tx.to);
   } catch (err) {
-    checks.push({ name: "bytecode", ok: false, detail: err instanceof Error ? err.message : "code lookup failed" });
-    return fail("UNKNOWN", "Could not read contract bytecode", checks, timestamp);
+    const msg = err instanceof Error ? err.message : "code lookup failed";
+    checks.push({ name: "bytecode", ok: false, detail: msg });
+    return fail("UNKNOWN", "SIMULATION_PROVIDER_ERROR", "Could not read contract bytecode", checks, timestamp);
   }
   const present = bytecode !== "0x" && bytecode !== "0x0";
   checks.push({
@@ -46,7 +41,7 @@ export async function simulateTransaction(chainKey: ChainKey, tx: CanonicalTx): 
     ok: present,
     detail: present ? `${Math.floor((bytecode.length - 2) / 2)} bytes` : "No code at destination",
   });
-  if (!present) return fail("NOT_READY", "Destination has no bytecode", checks, timestamp);
+  if (!present) return fail("NOT_READY", "SIMULATION_UNAVAILABLE", "Destination has no bytecode", checks, timestamp);
 
   let balance = 0n;
   try {
@@ -54,6 +49,7 @@ export async function simulateTransaction(chainKey: ChainKey, tx: CanonicalTx): 
     checks.push({ name: "balance", ok: true, detail: `${balance.toString()} wei` });
   } catch (err) {
     checks.push({ name: "balance", ok: false, detail: err instanceof Error ? err.message : "balance failed" });
+    return fail("UNKNOWN", "SIMULATION_PROVIDER_ERROR", "Could not read wallet balance", checks, timestamp);
   }
 
   const value = BigInt(tx.value);
@@ -61,6 +57,7 @@ export async function simulateTransaction(chainKey: ChainKey, tx: CanonicalTx): 
     checks.push({ name: "funds", ok: false, detail: `Need ${value.toString()} wei, have ${balance.toString()}` });
     return {
       status: "INSUFFICIENT_FUNDS",
+      kind: "SIMULATION_UNAVAILABLE",
       explanation: "Wallet native balance is below mint value",
       gasEstimate: null,
       feeWei: null,
@@ -77,14 +74,19 @@ export async function simulateTransaction(chainKey: ChainKey, tx: CanonicalTx): 
     checks.push({ name: "eth_call", ok: true, detail: "eth_call did not revert" });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    const kind = classifySimFailure(msg);
     checks.push({ name: "eth_call", ok: false, detail: msg });
     return {
-      status: "SIMULATION_FAILED",
-      explanation: `Simulation reverted: ${msg}`,
+      status: kind === "SIMULATION_PROVIDER_ERROR" ? "UNKNOWN" : "SIMULATION_FAILED",
+      kind,
+      explanation:
+        kind === "SIMULATION_PROVIDER_ERROR"
+          ? `Simulation provider error (not a contract revert): ${msg}`
+          : `Simulation reverted: ${msg}`,
       gasEstimate: null,
       feeWei: null,
       balanceWei: balance.toString(),
-      revertData: msg,
+      revertData: kind === "SIMULATION_REVERT" ? msg : null,
       checks,
       timestamp,
     };
@@ -107,9 +109,9 @@ export async function simulateTransaction(chainKey: ChainKey, tx: CanonicalTx): 
     checks.push({ name: "gas", ok: false, detail: err instanceof Error ? err.message : "estimate failed" });
   }
 
-  const status: ReadinessStatus = "READY";
   return {
-    status,
+    status: "READY",
+    kind: "SIMULATION_SUCCESS",
     explanation: "Read-only checks passed. User authorization is still required to send.",
     gasEstimate,
     feeWei,
@@ -122,12 +124,14 @@ export async function simulateTransaction(chainKey: ChainKey, tx: CanonicalTx): 
 
 function fail(
   status: ReadinessStatus,
+  kind: SimulationKind,
   explanation: string,
   checks: SimulationResult["checks"],
   timestamp: number,
 ): SimulationResult {
   return {
     status,
+    kind,
     explanation,
     gasEstimate: null,
     feeWei: null,

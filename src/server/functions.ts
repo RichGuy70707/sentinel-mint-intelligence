@@ -6,7 +6,7 @@ import { fetchMintGoPublic } from "@/discovery/mintgo";
 import { getPool } from "@/providers/pool";
 import { ethBlockNumber, ethChainId, ethGasPrice, ethGetBalance } from "@/providers/rpc";
 import { inspectContract } from "@/contracts/inspect";
-import { buildMintTransaction } from "@/transactions/builder";
+import { prepareMintFromEvidence } from "@/transactions/prepare";
 import { simulateTransaction } from "@/simulation/engine";
 import { CHAINS } from "@/chains/registry";
 import { providerAvailability } from "@/providers/secrets";
@@ -81,7 +81,15 @@ export const prepareMintFn = createServerFn({ method: "POST" })
       fn: z.enum(["mint", "publicMint", "mintPublic"]).optional(),
     }),
   )
-  .handler(async ({ data }) => buildMintTransaction(data));
+  .handler(async ({ data }) =>
+    prepareMintFromEvidence({
+      chainKey: data.chainKey,
+      contract: data.contract,
+      wallet: data.wallet,
+      quantity: data.quantity,
+      priceWeiPerMint: data.priceWeiPerMint,
+    }),
+  );
 
 export const simulateMintFn = createServerFn({ method: "POST" })
   .validator(

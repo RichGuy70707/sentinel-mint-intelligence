@@ -120,28 +120,41 @@ export function ProjectPane({ project }: { project: ProjectModel | null }) {
     }
     setBusy("sim");
     try {
-      const tx = await prepareMintFn({
+      const prepared = await prepareMintFn({
         data: {
           chainKey: project.chainKey,
           contract: project.contract,
           wallet: wallet.address,
           quantity: qty,
-          priceWeiPerMint: project.priceWei ?? stage?.priceWei ?? "0",
-          fn: "mint",
+          priceWeiPerMint: project.priceWei ?? stage?.priceWei ?? null,
         },
       });
-      const sim = await simulateMintFn({ data: { chainKey: project.chainKey, tx } });
+      if (!prepared.ok) {
+        upsertQueue({
+          projectId: project.id,
+          walletId: wallet.id,
+          stageId: stage?.id ?? "unknown",
+          quantity: qty,
+          preparedTx: null,
+          simulation: null,
+          status: "PREPARATION_FAILED",
+          txHash: null,
+        });
+        setNote(`${prepared.code}: ${prepared.reason}`);
+        return;
+      }
+      const sim = await simulateMintFn({ data: { chainKey: project.chainKey, tx: prepared.tx } });
       upsertQueue({
         projectId: project.id,
         walletId: wallet.id,
         stageId: stage?.id ?? "unknown",
         quantity: qty,
-        preparedTx: tx,
+        preparedTx: prepared.tx,
         simulation: sim,
-        status: sim.status === "READY" ? "READY" : "SIMULATED",
+        status: sim.status === "READY" ? "READY" : sim.status === "SIMULATION_FAILED" ? "SIMULATION_FAILED" : "SIMULATED",
         txHash: null,
       });
-      setNote(`${sim.status}: ${sim.explanation}`);
+      setNote(`${sim.kind}: ${sim.explanation}`);
       if (sim.status === "READY") push("TX_READY", "Simulation ready", `${project.name} / ${wallet.name}`);
       if (sim.status === "SIMULATION_FAILED") push("SIMULATION_FAILURE", "Simulation failed", sim.explanation);
       if (sim.status === "INSUFFICIENT_FUNDS") push("INSUFFICIENT_FUNDS", "Insufficient funds", wallet.name);

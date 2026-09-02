@@ -52,6 +52,12 @@ export type ReadinessStatus =
   | "STAGE_NOT_ACTIVE"
   | "UNKNOWN";
 
+export type SimulationKind =
+  | "SIMULATION_SUCCESS"
+  | "SIMULATION_REVERT"
+  | "SIMULATION_PROVIDER_ERROR"
+  | "SIMULATION_UNAVAILABLE";
+
 export type ProviderHealthState =
   | "HEALTHY"
   | "DEGRADED"
@@ -92,6 +98,7 @@ export interface StageModel {
   maxPerWallet: number | null;
   maxSupply: number | null;
   requiresVerification: boolean;
+  gateContract?: string | null;
   provenance: Provenance;
 }
 
@@ -178,6 +185,7 @@ export interface CanonicalTx {
 
 export interface SimulationResult {
   status: ReadinessStatus;
+  kind: SimulationKind;
   explanation: string;
   gasEstimate: string | null;
   feeWei: string | null;
@@ -229,7 +237,22 @@ export interface QueueItem {
   quantity: number;
   preparedTx: CanonicalTx | null;
   simulation: SimulationResult | null;
-  status: "IDLE" | "PREPARED" | "SIMULATED" | "READY" | "AUTHORIZED" | "BROADCAST" | "CONFIRMED" | "FAILED" | "CANCELLED";
+  status:
+    | "IDLE"
+    | "PREPARED"
+    | "SIMULATED"
+    | "READY"
+    | "PREPARATION_FAILED"
+    | "SIMULATION_FAILED"
+    | "AWAITING_WALLET"
+    | "NOT_AUTHORIZED"
+    | "REJECTED"
+    | "SIGN_FAILED"
+    | "SUBMITTED"
+    | "BROADCAST"
+    | "CONFIRMED"
+    | "FAILED"
+    | "CANCELLED";
   txHash: string | null;
   updatedAt: number;
 }

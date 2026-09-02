@@ -8,6 +8,7 @@ import type { ProjectModel } from "@/core/types";
 import { evaluateProjectWallets } from "@/eligibility/engine";
 import { formatInt } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { useEligibilityHints } from "@/hooks/use-eligibility-hints";
 import { catalogPhase, useCatalog } from "@/state/catalog";
 import { useHints } from "@/state/hints";
 import { useWallets } from "@/state/wallets";
@@ -31,6 +32,7 @@ export function DiscoveryBoard({ mode }: { mode: BoardMode }) {
   const scannedAt = useCatalog((s) => s.scannedAt);
   const wallets = useWallets((s) => s.wallets);
   const hintStore = useHints((s) => s.byProject);
+  useEligibilityHints();
 
   const { eligibleIds, readyIds, requiresIds, unknownIds } = useMemo(() => {
     const eligibleIds = new Set<string>();
