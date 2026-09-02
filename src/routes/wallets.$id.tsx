@@ -32,7 +32,7 @@ function WalletDetail() {
       <PageHeader kicker="Wallet" title={wallet.name} />
       <p className="mb-2 font-mono text-sm text-muted">{shortAddress(wallet.address, 8)}</p>
       <p className="mb-6 text-sm text-muted">{wallet.notes || "No notes."}</p>
-      <h2 className="mb-3 text-sm font-medium">Eligibility across catalog</h2>
+      <h2 className="mb-3 text-sm font-medium">What this wallet can mint</h2>
       {rows.length === 0 ? (
         <EmptyState title="No projects loaded" body="Scan or inspect a contract first." />
       ) : (
@@ -42,9 +42,12 @@ function WalletDetail() {
               key={project.id}
               to="/projects/$id"
               params={{ id: encodeURIComponent(project.id) }}
-              className="flex items-center justify-between rounded-md border border-line px-3 py-2"
+              className="flex items-center justify-between gap-3 rounded-md border border-line px-3 py-2"
             >
-              <span className="text-sm">{project.name}</span>
+              <div className="min-w-0">
+                <div className="truncate text-sm">{project.name}</div>
+                <div className="truncate text-[11px] text-muted">{result.reason}</div>
+              </div>
               <EligibilityBadge status={result.status} />
             </Link>
           ))}

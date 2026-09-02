@@ -68,6 +68,7 @@ export function ProjectPane({ project }: { project: ProjectModel | null }) {
             next[pair.id] = {
               nftBalance: row.nftBalance ?? undefined,
               nativeBalanceWei: row.nativeBalanceWei ?? undefined,
+              gateTokenBalance: row.gateTokenBalance ?? undefined,
             };
           }
         }

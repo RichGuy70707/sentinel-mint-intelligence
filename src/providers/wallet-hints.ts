@@ -7,23 +7,28 @@ export interface WalletHintRow {
   address: string;
   nftBalance: number | null;
   nativeBalanceWei: string | null;
+  gateTokenBalance: number | null;
 }
 
 export async function readWalletHints(
   chainKey: ChainKey,
   contract: string,
   wallets: string[],
+  gateContract?: string | null,
 ): Promise<WalletHintRow[]> {
   const unique = [...new Set(wallets.map((w) => normalizeAddress(w)))];
   return Promise.all(
     unique.map(async (address) => {
-      const [nftBalance, nativeBalanceWei] = await Promise.all([
+      const [nftBalance, nativeBalanceWei, gateTokenBalance] = await Promise.all([
         readNftBalance(chainKey, contract, address),
         ethGetBalance(chainKey, address)
           .then((v) => v.toString())
           .catch(() => null),
+        gateContract && gateContract.toLowerCase() !== contract.toLowerCase()
+          ? readNftBalance(chainKey, gateContract, address)
+          : Promise.resolve(null),
       ]);
-      return { address, nftBalance, nativeBalanceWei };
+      return { address, nftBalance, nativeBalanceWei, gateTokenBalance };
     }),
   );
 }

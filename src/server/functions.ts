@@ -67,9 +67,10 @@ export const walletHintsFn = createServerFn({ method: "POST" })
       chainKey,
       contract: z.string(),
       wallets: z.array(z.string()).max(20),
+      gateContract: z.string().optional(),
     }),
   )
-  .handler(async ({ data }) => readWalletHints(data.chainKey, data.contract, data.wallets));
+  .handler(async ({ data }) => readWalletHints(data.chainKey, data.contract, data.wallets, data.gateContract));
 
 export const prepareMintFn = createServerFn({ method: "POST" })
   .validator(

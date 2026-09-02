@@ -21,9 +21,6 @@ export const useWallets = create<WalletState>()(
       addWallet: ({ name, address, notes, tags }) => {
         if (!isHexAddress(address)) throw new Error("Invalid address");
         const normalized = normalizeAddress(address);
-        if (get().wallets.some((w) => w.address === normalized)) {
-          throw new Error("Wallet already registered");
-        }
         const record: WalletRecord = {
           id: uid(),
           name: name.trim() || "Untitled",

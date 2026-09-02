@@ -74,7 +74,7 @@ export function evaluateWalletStage(
         evidence: "UNKNOWN",
         requiresVerification: true,
       };
-    case "NFT_GATED":
+    case "NFT_GATED": {
       if (!stage.gateContract) {
         return {
           ...base,
@@ -85,7 +85,9 @@ export function evaluateWalletStage(
           requiresVerification: true,
         };
       }
-      if (hints.nftBalance == null) {
+      const sameCollection = project.contract != null && stage.gateContract.toLowerCase() === project.contract.toLowerCase();
+      const gateBal = hints.gateTokenBalance ?? (sameCollection ? hints.nftBalance : undefined);
+      if (gateBal == null) {
         return {
           ...base,
           status: "UNKNOWN",
@@ -94,7 +96,7 @@ export function evaluateWalletStage(
           evidence: "UNKNOWN",
         };
       }
-      if (hints.nftBalance <= 0) {
+      if (gateBal <= 0) {
         return {
           ...base,
           status: "NOT_ELIGIBLE",
@@ -106,10 +108,11 @@ export function evaluateWalletStage(
       return {
         ...base,
         status: "ELIGIBLE",
-        reason: `Holds ${hints.nftBalance} gate NFT(s)`,
+        reason: `Holds ${gateBal} gate NFT(s)`,
         confidence: "HIGH",
         evidence: "ON_CHAIN",
       };
+    }
     case "TOKEN_GATED":
       if (hints.gateTokenBalance == null) {
         return {
@@ -151,11 +154,46 @@ export function evaluateWalletStage(
           evidence: "ON_CHAIN",
         };
       }
+      const price = stage.priceWei ?? project.priceWei;
+      if (price != null && price !== "0") {
+        if (hints.nativeBalanceWei == null) {
+          return {
+            ...base,
+            status: "UNKNOWN",
+            reason: "Mint price is evidenced but native balance has not been read",
+            confidence: "LOW",
+            evidence: "UNKNOWN",
+          };
+        }
+        try {
+          if (BigInt(hints.nativeBalanceWei) < BigInt(price)) {
+            return {
+              ...base,
+              status: "NOT_ELIGIBLE",
+              reason: "Insufficient native balance for evidenced mint price",
+              confidence: "HIGH",
+              evidence: "ON_CHAIN",
+            };
+          }
+        } catch {
+          return {
+            ...base,
+            status: "UNKNOWN",
+            reason: "Native balance could not be compared to mint price",
+            confidence: "LOW",
+            evidence: "UNKNOWN",
+          };
+        }
+      }
       const held = hints.nftBalance != null ? `; holds ${hints.nftBalance} already` : "";
+      const cap =
+        stage.maxPerWallet != null && hints.nftBalance != null
+          ? `; ${stage.maxPerWallet - hints.nftBalance} remaining under cap`
+          : "";
       return {
         ...base,
         status: "ELIGIBLE",
-        reason: `${stage.kind} stage does not require a private proof${held}`,
+        reason: `${stage.kind} stage does not require a private proof${held}${cap}`,
         confidence: stage.mechanismConfidence === "VERIFIED" ? "HIGH" : "MEDIUM",
       };
     }

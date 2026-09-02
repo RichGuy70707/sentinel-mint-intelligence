@@ -6,6 +6,10 @@ import { intelCache } from "@/providers/ttl-cache";
 import { decodeCall, encodeCall, ERC165_ABI, ERC721_ABI, IERC165 } from "./abi";
 import type { Abi } from "viem";
 
+const ERC20_DECIMALS_ABI = [
+  { type: "function", name: "decimals", stateMutability: "view", inputs: [], outputs: [{ type: "uint8" }] },
+] as const satisfies Abi;
+
 const SUPPLY_ABI = [
   { type: "function", name: "maxSupply", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "MAX_SUPPLY", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
@@ -102,7 +106,11 @@ async function inspectFresh(chainKey: ChainKey, address: string): Promise<Contra
   let contractType: string | null = null;
   if (interfaces.includes("ERC1155")) contractType = "ERC-1155";
   else if (interfaces.includes("ERC721")) contractType = "ERC-721";
-  else if (bytecodePresent) contractType = "UNKNOWN_CONTRACT";
+  else if (bytecodePresent) {
+    const decimals = await readDecimals(chainKey, address);
+    contractType = decimals != null ? "ERC-20" : "UNKNOWN_CONTRACT";
+    if (decimals != null) interfaces.push("ERC20");
+  }
 
   return {
     chainKey,
@@ -125,6 +133,17 @@ async function inspectFresh(chainKey: ChainKey, address: string): Promise<Contra
       note: bytecodePresent ? "eth_getCode + eth_call" : "No bytecode at address",
     },
   };
+}
+
+async function readDecimals(chainKey: ChainKey, address: string): Promise<number | null> {
+  try {
+    const data = encodeCall(ERC20_DECIMALS_ABI, "decimals", []);
+    const raw = (await ethCall(chainKey, address, data)) as `0x${string}`;
+    const value = Number(decodeCall<number>(ERC20_DECIMALS_ABI, "decimals", raw));
+    return Number.isInteger(value) && value >= 0 && value <= 18 ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 export function confidenceFromIntel(intel: ContractIntel): Confidence {

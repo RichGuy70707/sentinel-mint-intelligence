@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { walletHintsFn } from "@/server/functions";
+import type { OnChainHints } from "@/eligibility/engine";
 import { useCatalog } from "@/state/catalog";
 import { useHints } from "@/state/hints";
 import { useWallets } from "@/state/wallets";
@@ -31,10 +32,14 @@ export function useEligibilityHints() {
             data: { chainKey: p.chainKey, contract: p.contract, wallets: wallets.map((w) => w.address) },
           });
           if (cancelled) return;
-          const next: Record<string, { nftBalance?: number; nativeBalanceWei?: string }> = {};
+          const next: Record<string, OnChainHints> = {};
           for (const w of wallets) {
             const row = rows.find((r) => r.address.toLowerCase() === w.address.toLowerCase());
-            if (row) next[w.id] = { nftBalance: row.nftBalance ?? undefined, nativeBalanceWei: row.nativeBalanceWei ?? undefined };
+            if (row) next[w.id] = {
+              nftBalance: row.nftBalance ?? undefined,
+              nativeBalanceWei: row.nativeBalanceWei ?? undefined,
+              gateTokenBalance: row.gateTokenBalance ?? undefined,
+            };
           }
           setProjectHints(p.id, next);
         } catch {

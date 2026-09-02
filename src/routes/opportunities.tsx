@@ -6,6 +6,7 @@ import { EmptyState, Page, PageHeader } from "@/components/page";
 import { evaluateProjectWallets, pickRelevantStage } from "@/eligibility/engine";
 import { useCatalog } from "@/state/catalog";
 import { useHints } from "@/state/hints";
+import { formatEth } from "@/lib/format";
 import { useWallets } from "@/state/wallets";
 
 export const Route = createFileRoute("/opportunities")({ component: OpportunitiesPage });
@@ -36,9 +37,9 @@ function OpportunitiesPage() {
       <PageHeader kicker="Focus" title="My opportunities" />
       <p className="mb-5 text-sm text-muted">{rows.filter((r) => r.result.status === "ELIGIBLE").length} eligible wallet/project pairs in the current catalog.</p>
       {wallets.length === 0 && <EmptyState title="Add wallets first" body="Opportunities are computed from your registry." />}
-      <Section title="Live now" rows={live} />
-      <Section title="Starting soon" rows={soon} />
-      <Section title="Needs proof" rows={blocked} />
+      <Section title="Live now" rows={live} names={wallets} />
+      <Section title="Starting soon" rows={soon} names={wallets} />
+      <Section title="Needs proof" rows={blocked} names={wallets} />
     </Page>
   );
 }
@@ -46,8 +47,10 @@ function OpportunitiesPage() {
 function Section({
   title,
   rows,
+  names,
 }: {
   title: string;
+  names: { id: string; name: string }[];
   rows: Array<{
     project: import("@/core/types").ProjectModel;
     result: import("@/core/types").EligibilityResult;
@@ -73,9 +76,13 @@ function Section({
                 {stage && <StageBadge kind={stage.kind} />}
                 <EligibilityBadge status={result.status} />
               </div>
+              <p className="mt-1 text-[11px] text-muted">{result.reason}</p>
             </div>
             <div className="text-right">
-              <div className="text-[11px] text-subtle">{result.walletAddress.slice(0, 8)}</div>
+              <div className="text-[11px] text-subtle">
+                {names.find((w) => w.id === result.walletId)?.name ?? result.walletAddress.slice(0, 10)}
+              </div>
+              <div className="font-mono text-[11px] text-muted">{formatEth(stage?.priceWei ?? project.priceWei)}</div>
               <Countdown startTime={stage?.startTime ?? null} endTime={stage?.endTime ?? null} />
             </div>
           </Link>

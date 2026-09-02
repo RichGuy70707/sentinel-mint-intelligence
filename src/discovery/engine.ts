@@ -9,6 +9,7 @@ import { openSeaMarket } from "@/providers/opensea";
 import { ethBlockNumber, ethGetLogs, type LogEntry } from "@/providers/rpc";
 import { intelCache } from "@/providers/ttl-cache";
 import { deriveStagesFromIntel, resolveMintStatus } from "@/stages/engine";
+import { isFungibleToken, keepMintCandidate } from "./token-class";
 import { isProtocolReceiptNft, receiptLabel } from "./noise";
 import { dedupeMintLogs, saneSupply, velocityPerMin } from "./activity";
 
@@ -203,6 +204,7 @@ function aggregateBlockscout(chainKey: ChainKey, items: BlockscoutTransfer[], sc
   for (const item of items) {
     const raw = tokenAddress(item);
     if (!raw) continue;
+    if (isFungibleToken({ tokenType: item.token?.type ?? null })) continue;
     const contract = normalizeAddress(raw);
     const to = item.to?.hash ? normalizeAddress(item.to.hash) : null;
     const current = map.get(contract) ?? {
@@ -365,14 +367,10 @@ async function enrichProject(p: ProjectModel): Promise<ProjectModel> {
 
 function keepDiscovered(p: ProjectModel): boolean {
   if (isProtocolReceiptNft(p)) return false;
-  if (
-    p.interfaces.length > 0 &&
-    !p.interfaces.includes("ERC721") &&
-    !p.interfaces.includes("ERC1155")
-  ) {
-    return false;
-  }
-  return true;
+  return keepMintCandidate({
+    contractType: p.contractType,
+    interfaces: p.interfaces,
+  });
 }
 
 function hex(n: number): string {
