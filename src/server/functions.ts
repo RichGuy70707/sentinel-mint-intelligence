@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { ChainKey } from "@/core/types";
 import { discoverMints, inspectAsProject } from "@/discovery/engine";
 import { fetchMintGoPublic } from "@/discovery/mintgo";
+import { openSeaPoolSnapshot } from "@/providers/opensea";
 import { getPool } from "@/providers/pool";
 import { ethBlockNumber, ethChainId, ethGasPrice, ethGetBalance } from "@/providers/rpc";
 import { inspectContract } from "@/contracts/inspect";
@@ -139,10 +140,16 @@ export const systemHealthFn = createServerFn({ method: "GET" }).handler(async ()
     availability,
     notes: [
       ...probes.filter((p) => !p.ok).map((p) => `${p.chainKey}: ${p.error}`),
-      availability.opensea ? "OpenSea adapter armed" : "OpenSea keys not configured — floor/volume stay UNKNOWN",
-      availability.alchemy.eth || availability.alchemy.base
-        ? "Alchemy adapter armed for configured networks"
+      availability.opensea
+        ? `OpenSea: ${availability.openseaSlotCount} key slot(s) configured`
+        : "OpenSea keys not configured — floor/volume stay UNKNOWN",
+      availability.alchemySlotCount > 0
+        ? `Alchemy: ${availability.alchemySlotCount} key slot(s) configured for eth/base/ink`
         : "Alchemy keys not configured — Blockscout + public RPC discovery",
     ],
+    credentialSlots: {
+      alchemy: availability.alchemySlotCount,
+      opensea: openSeaPoolSnapshot().map((s) => ({ id: s.id, state: s.state, successes: s.successes, failures: s.failures })),
+    },
   };
 });

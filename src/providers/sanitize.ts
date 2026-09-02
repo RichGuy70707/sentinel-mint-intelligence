@@ -1,4 +1,4 @@
-const KEYISH = /(?:\/v2\/|\/v3\/)[A-Za-z0-9_-]{8,}/g;
+const KEYISH = /(?:\/v2\/|\/v3\/|\/nft\/v3\/)[A-Za-z0-9_-]{8,}/g;
 const QUERY_KEY = /([?&](?:apikey|api_key|key)=)[^&\s]+/gi;
 const ASSIGN_KEY = /((?:api[_-]?key|alchemy[_-]?key)\s*[:=]\s*)[A-Za-z0-9_-]{8,}/gi;
 

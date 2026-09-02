@@ -1,5 +1,6 @@
 import type { ChainKey, MarketSnapshot } from "@/core/types";
-import { openSeaKeys } from "./secrets";
+import { KeyPool, isRetryableProviderStatus } from "./key-pool.ts";
+import { listedOpenSeaKeys } from "./secrets.ts";
 
 const CHAIN: Record<ChainKey, string | null> = {
   eth: "ethereum",
@@ -8,105 +9,80 @@ const CHAIN: Record<ChainKey, string | null> = {
   rh: null,
 };
 
-let cursor = 0;
+let seaPool: KeyPool | null = null;
 
-function nextKey(): string | null {
-  const keys = openSeaKeys();
-  if (!keys.length) return null;
-  const key = keys[cursor % keys.length]!;
-  cursor += 1;
-  return key;
+function getOpenSeaPool(): KeyPool {
+  if (!seaPool) {
+    seaPool = new KeyPool(listedOpenSeaKeys().map((secret, i) => ({ id: `opensea-${i + 1}`, secret })));
+  }
+  return seaPool;
+}
+
+export function openSeaPoolSnapshot() {
+  return getOpenSeaPool().snapshot();
 }
 
 export async function openSeaMarket(chainKey: ChainKey, address: string): Promise<MarketSnapshot | null> {
   const chain = CHAIN[chainKey];
-  const key = nextKey();
-  if (!chain || !key) return null;
+  const pool = getOpenSeaPool();
+  if (!chain || pool.size === 0) return null;
   try {
-    const res = await fetch(`https://api.opensea.io/api/v2/chain/${chain}/contract/${address}`, {
-      headers: { accept: "application/json", "x-api-key": key },
-    });
-    if (res.status === 429) {
-      return {
-        volumeWei: null,
-        floorWei: null,
-        floorChangePct: null,
-        sales: null,
-        quality: "STALE",
-        provenance: {
-          source: "OPEN_SEA_API",
-          quality: "STALE",
-          confidence: "LOW",
-          fetchedAt: Date.now(),
-          ttlMs: 30_000,
-          note: "OpenSea rate limited",
-        },
+    return await pool.request(async (key) => {
+      const res = await fetch(`https://api.opensea.io/api/v2/chain/${chain}/contract/${address}`, {
+        headers: { accept: "application/json", "x-api-key": key },
+      });
+      if (isRetryableProviderStatus(res.status)) throw new Error(`OpenSea HTTP ${res.status}`);
+      if (!res.ok) {
+        return empty("UNKNOWN", `OpenSea contract lookup ${res.status}`);
+      }
+      const body = (await res.json()) as { collection?: string };
+      const slug = body.collection;
+      if (!slug) return empty("UNKNOWN", "Contract has no OpenSea collection slug");
+      const statsRes = await fetch(`https://api.opensea.io/api/v2/collections/${slug}/stats`, {
+        headers: { accept: "application/json", "x-api-key": key },
+      });
+      if (isRetryableProviderStatus(statsRes.status)) throw new Error(`OpenSea stats HTTP ${statsRes.status}`);
+      if (!statsRes.ok) return empty("UNKNOWN", `Collection ${slug} stats unavailable (${statsRes.status})`);
+      const stats = (await statsRes.json()) as {
+        total?: { volume?: number; sales?: number; floor_price?: number };
       };
-    }
-    if (!res.ok) return null;
-    const body = (await res.json()) as {
-      collection?: string;
-      contract_standard?: string;
-    };
-    const slug = body.collection;
-    if (!slug) {
+      const floorEth = stats.total?.floor_price;
+      const volumeEth = stats.total?.volume;
       return {
-        volumeWei: null,
-        floorWei: null,
+        volumeWei: volumeEth != null ? BigInt(Math.round(volumeEth * 1e18)).toString() : null,
+        floorWei: floorEth != null ? BigInt(Math.round(floorEth * 1e18)).toString() : null,
         floorChangePct: null,
-        sales: null,
-        quality: "UNKNOWN",
+        sales: stats.total?.sales ?? null,
+        quality: floorEth != null || volumeEth != null ? "LIVE" : "UNKNOWN",
         provenance: {
           source: "OPEN_SEA_API",
-          quality: "UNKNOWN",
-          confidence: "LOW",
+          quality: floorEth != null ? "LIVE" : "UNKNOWN",
+          confidence: "MEDIUM",
           fetchedAt: Date.now(),
           ttlMs: 60_000,
-          note: "Contract has no OpenSea collection slug",
+          note: `OpenSea collection ${slug}`,
         },
-      };
-    }
-    const statsRes = await fetch(`https://api.opensea.io/api/v2/collections/${slug}/stats`, {
-      headers: { accept: "application/json", "x-api-key": key },
+      } satisfies MarketSnapshot;
     });
-    if (!statsRes.ok) {
-      return {
-        volumeWei: null,
-        floorWei: null,
-        floorChangePct: null,
-        sales: null,
-        quality: "UNKNOWN",
-        provenance: {
-          source: "OPEN_SEA_API",
-          quality: "UNKNOWN",
-          confidence: "LOW",
-          fetchedAt: Date.now(),
-          ttlMs: 60_000,
-          note: `Collection ${slug} stats unavailable (${statsRes.status})`,
-        },
-      };
-    }
-    const stats = (await statsRes.json()) as {
-      total?: { volume?: number; sales?: number; floor_price?: number };
-    };
-    const floorEth = stats.total?.floor_price;
-    const volumeEth = stats.total?.volume;
-    return {
-      volumeWei: volumeEth != null ? BigInt(Math.round(volumeEth * 1e18)).toString() : null,
-      floorWei: floorEth != null ? BigInt(Math.round(floorEth * 1e18)).toString() : null,
-      floorChangePct: null,
-      sales: stats.total?.sales ?? null,
-      quality: floorEth != null || volumeEth != null ? "LIVE" : "UNKNOWN",
-      provenance: {
-        source: "OPEN_SEA_API",
-        quality: floorEth != null ? "LIVE" : "UNKNOWN",
-        confidence: "MEDIUM",
-        fetchedAt: Date.now(),
-        ttlMs: 60_000,
-        note: `OpenSea collection ${slug}`,
-      },
-    };
   } catch {
-    return null;
+    return empty("STALE", "OpenSea keys exhausted or rate limited");
   }
+}
+
+function empty(quality: MarketSnapshot["quality"], note: string): MarketSnapshot {
+  return {
+    volumeWei: null,
+    floorWei: null,
+    floorChangePct: null,
+    sales: null,
+    quality,
+    provenance: {
+      source: "OPEN_SEA_API",
+      quality,
+      confidence: "LOW",
+      fetchedAt: Date.now(),
+      ttlMs: quality === "STALE" ? 30_000 : 60_000,
+      note,
+    },
+  };
 }

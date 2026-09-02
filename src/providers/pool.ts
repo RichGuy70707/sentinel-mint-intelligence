@@ -1,5 +1,5 @@
 import type { ChainKey, ProviderHealthState, ProviderSnapshot } from "@/core/types";
-import { alchemyHttpUrl } from "./secrets.ts";
+import { alchemyRpcEndpoints } from "./secrets.ts";
 import { sanitizeProviderText, sanitizeProviderUrl } from "./sanitize.ts";
 
 export interface ProviderConfig {
@@ -27,6 +27,7 @@ export class ProviderPool {
   private readonly configs: ProviderConfig[];
   private readonly state = new Map<string, InternalState>();
   private readonly inflight = new Map<string, Promise<unknown>>();
+  private readonly rotate = new Map<ChainKey, number>();
 
   constructor(configs: ProviderConfig[]) {
     this.configs = configs;
@@ -61,7 +62,7 @@ export class ProviderPool {
 
   providersFor(chainKey: ChainKey): ProviderConfig[] {
     const now = Date.now();
-    return this.configs
+    const ranked = this.configs
       .filter((c) => c.chainKey === chainKey)
       .filter((c) => {
         const s = this.state.get(c.id)!;
@@ -82,6 +83,10 @@ export class ProviderPool {
         if (a.priority !== b.priority) return a.priority - b.priority;
         return la - lb;
       });
+    if (!ranked.length) return ranked;
+    const start = (this.rotate.get(chainKey) ?? 0) % ranked.length;
+    this.rotate.set(chainKey, start + 1);
+    return [...ranked.slice(start), ...ranked.slice(0, start)];
   }
 
   async request<T>(
@@ -177,27 +182,32 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 function alchemyProviders(): ProviderConfig[] {
   const out: ProviderConfig[] = [];
   for (const chain of ["eth", "base", "ink"] as ChainKey[]) {
-    const url = alchemyHttpUrl(chain);
-    if (url) out.push({ id: `alchemy-${chain}`, chainKey: chain, url, priority: 0 });
+    for (const ep of alchemyRpcEndpoints(chain)) {
+      out.push({ id: ep.id, chainKey: chain, url: ep.url, priority: 0 });
+    }
   }
   return out;
 }
 
-export const DEFAULT_PROVIDERS: ProviderConfig[] = [
-  ...alchemyProviders(),
-  { id: "eth-publicnode", chainKey: "eth", url: "https://ethereum.publicnode.com", priority: 1 },
-  { id: "eth-mevblocker", chainKey: "eth", url: "https://rpc.mevblocker.io", priority: 2 },
-  { id: "eth-drpc", chainKey: "eth", url: "https://eth.drpc.org", priority: 3 },
-  { id: "rh-official", chainKey: "rh", url: "https://rpc.mainnet.chain.robinhood.com", priority: 1 },
-  { id: "rh-publicnode", chainKey: "rh", url: "https://robinhood-rpc.publicnode.com", priority: 2 },
-  { id: "ink-gel", chainKey: "ink", url: "https://rpc-gel.inkonchain.com", priority: 1 },
-  { id: "base-publicnode", chainKey: "base", url: "https://base.publicnode.com", priority: 1 },
-  { id: "base-official", chainKey: "base", url: "https://mainnet.base.org", priority: 2 },
-];
+export function buildDefaultProviders(): ProviderConfig[] {
+  return [
+    ...alchemyProviders(),
+    { id: "eth-publicnode", chainKey: "eth", url: "https://ethereum.publicnode.com", priority: 1 },
+    { id: "eth-mevblocker", chainKey: "eth", url: "https://rpc.mevblocker.io", priority: 2 },
+    { id: "eth-drpc", chainKey: "eth", url: "https://eth.drpc.org", priority: 3 },
+    { id: "rh-official", chainKey: "rh", url: "https://rpc.mainnet.chain.robinhood.com", priority: 1 },
+    { id: "rh-publicnode", chainKey: "rh", url: "https://robinhood-rpc.publicnode.com", priority: 2 },
+    { id: "ink-gel", chainKey: "ink", url: "https://rpc-gel.inkonchain.com", priority: 1 },
+    { id: "base-publicnode", chainKey: "base", url: "https://base.publicnode.com", priority: 1 },
+    { id: "base-official", chainKey: "base", url: "https://mainnet.base.org", priority: 2 },
+  ];
+}
+
+export const DEFAULT_PROVIDERS: ProviderConfig[] = buildDefaultProviders();
 
 let sharedPool: ProviderPool | null = null;
 
 export function getPool(): ProviderPool {
-  if (!sharedPool) sharedPool = new ProviderPool(DEFAULT_PROVIDERS);
+  if (!sharedPool) sharedPool = new ProviderPool(buildDefaultProviders());
   return sharedPool;
 }
