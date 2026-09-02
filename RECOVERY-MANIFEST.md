@@ -125,3 +125,10 @@
 - OpenSea "Unidentified contract" and similar placeholders are not project names
 - Blockscout token metadata is a last-resort name source after NFT classification
 - Persisted placeholder names are rewritten to UNKNOWN PROJECT
+
+## Activity vs lifetime supply (2026-09-02)
+
+- minted is lifetime totalSupply only
+- windowMints is observed scan-window events only
+- velocity uses window activity, never totalSupply
+- rows show +activity separately from minted
