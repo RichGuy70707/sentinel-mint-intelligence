@@ -1,0 +1,145 @@
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import { classifyMintStatus, normalizeTimestamp } from "@/core/time";
+import type { ChainKey, MintStatus, ProjectModel, StageKind, SystemHealth } from "@/core/types";
+
+export type SignalKey = "myEligible" | "readyToMint" | "requiresVerification" | "unknownEligibility";
+
+interface CatalogState {
+  projects: ProjectModel[];
+  scannedAt: number | null;
+  scanning: boolean;
+  errors: { chainKey: string; message: string }[];
+  mintgoNote: string | null;
+  health: SystemHealth | null;
+  selectedId: string | null;
+  query: string;
+  chainFilter: "ALL" | ChainKey;
+  priceFilter: "ALL" | "FREE" | "PAID";
+  stageFilter: "ALL" | StageKind;
+  statusFilter: "ALL" | MintStatus;
+  signals: Record<SignalKey, boolean>;
+  gasGwei: number | null;
+  setScan: (data: {
+    projects: ProjectModel[];
+    scannedAt: number;
+    errors: { chainKey: string; message: string }[];
+    mintgoNote?: string;
+  }) => void;
+  upsert: (project: ProjectModel) => void;
+  setScanning: (v: boolean) => void;
+  setHealth: (health: SystemHealth) => void;
+  select: (id: string | null) => void;
+  setQuery: (q: string) => void;
+  setChainFilter: (c: "ALL" | ChainKey) => void;
+  setPriceFilter: (c: "ALL" | "FREE" | "PAID") => void;
+  setStageFilter: (c: "ALL" | StageKind) => void;
+  setStatusFilter: (c: "ALL" | MintStatus) => void;
+  toggleSignal: (k: SignalKey) => void;
+  setGasGwei: (n: number | null) => void;
+}
+
+const EMPTY_SIGNALS: Record<SignalKey, boolean> = {
+  myEligible: false,
+  readyToMint: false,
+  requiresVerification: false,
+  unknownEligibility: false,
+};
+
+export function sanitizeProject(project: ProjectModel): ProjectModel {
+  const stages = project.stages.map((s) => ({
+    ...s,
+    startTime: normalizeTimestamp(s.startTime),
+    endTime: normalizeTimestamp(s.endTime),
+  }));
+  return {
+    ...project,
+    stages,
+    status: classifyMintStatus(stages),
+  };
+}
+
+function dedupeProjects(projects: ProjectModel[]): ProjectModel[] {
+  const map = new Map<string, ProjectModel>();
+  for (const raw of projects) {
+    const p = sanitizeProject(raw);
+    const prev = map.get(p.id);
+    if (!prev) {
+      map.set(p.id, p);
+      continue;
+    }
+    map.set(p.id, {
+      ...prev,
+      ...p,
+      name: looksLikeAddress(p.name) && !looksLikeAddress(prev.name) ? prev.name : p.name,
+      minted: Math.max(prev.minted ?? 0, p.minted ?? 0),
+      uniqueMinters: Math.max(prev.uniqueMinters ?? 0, p.uniqueMinters ?? 0),
+      mintVelocityPerMin: Math.max(prev.mintVelocityPerMin ?? 0, p.mintVelocityPerMin ?? 0),
+      supply: p.supply ?? prev.supply,
+      priceWei: p.priceWei ?? prev.priceWei,
+      market: p.market ?? prev.market,
+      deployer: p.deployer ?? prev.deployer,
+    });
+  }
+  return [...map.values()];
+}
+
+function looksLikeAddress(name: string): boolean {
+  return name.startsWith("0x") || name.includes("…");
+}
+
+export const useCatalog = create<CatalogState>()(
+  persist(
+    (set, get) => ({
+      projects: [],
+      scannedAt: null,
+      scanning: false,
+      errors: [],
+      mintgoNote: null,
+      health: null,
+      selectedId: null,
+      query: "",
+      chainFilter: "ALL",
+      priceFilter: "ALL",
+      stageFilter: "ALL",
+      statusFilter: "ALL",
+      signals: EMPTY_SIGNALS,
+      gasGwei: null,
+      setScan: ({ projects, scannedAt, errors, mintgoNote }) => {
+        const next = dedupeProjects(projects);
+        set({
+          projects: next,
+          scannedAt,
+          errors,
+          mintgoNote: mintgoNote ?? get().mintgoNote,
+          selectedId:
+            get().selectedId && next.some((p) => p.id === get().selectedId) ? get().selectedId : (next[0]?.id ?? null),
+        });
+      },
+      upsert: (project) => {
+        const cleaned = sanitizeProject(project);
+        const rest = get().projects.filter((p) => p.id !== cleaned.id);
+        set({ projects: dedupeProjects([cleaned, ...rest]), selectedId: cleaned.id });
+      },
+      setScanning: (scanning) => set({ scanning }),
+      setHealth: (health) => set({ health }),
+      select: (selectedId) => set({ selectedId }),
+      setQuery: (query) => set({ query }),
+      setChainFilter: (chainFilter) => set({ chainFilter }),
+      setPriceFilter: (priceFilter) => set({ priceFilter }),
+      setStageFilter: (stageFilter) => set({ stageFilter }),
+      setStatusFilter: (statusFilter) => set({ statusFilter }),
+      toggleSignal: (k) => set({ signals: { ...get().signals, [k]: !get().signals[k] } }),
+      setGasGwei: (gasGwei) => set({ gasGwei }),
+    }),
+    {
+      name: "sentinel.catalog.v3",
+      partialize: (s) => ({
+        projects: s.projects,
+        scannedAt: s.scannedAt,
+        selectedId: s.selectedId,
+        chainFilter: s.chainFilter,
+      }),
+    },
+  ),
+);
