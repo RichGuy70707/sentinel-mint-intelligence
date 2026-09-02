@@ -44,10 +44,21 @@ export async function ethGetCode(chainKey: ChainKey, address: string): Promise<s
   return rpcCall<string>(chainKey, "eth_getCode", [address, "latest"]);
 }
 
-export async function ethCall(chainKey: ChainKey, to: string, data: string, from?: string): Promise<string> {
+export async function ethCall(
+  chainKey: ChainKey,
+  to: string,
+  data: string,
+  from?: string,
+  value?: string,
+): Promise<string> {
   const tx: Record<string, string> = { to, data };
   if (from) tx.from = from;
+  if (value && value !== "0x" && value !== "0") tx.value = value.startsWith("0x") ? value : toRpcHex(value);
   return rpcCall<string>(chainKey, "eth_call", [tx, "latest"]);
+}
+
+function toRpcHex(value: string): string {
+  return `0x${BigInt(value).toString(16)}`;
 }
 
 export async function ethEstimateGas(

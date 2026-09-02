@@ -3,6 +3,7 @@ import { matchSafeMintFromAbi } from "@/contracts/intelligence";
 import { probeSale } from "@/contracts/sale";
 import { detectPublicMintFn } from "@/contracts/selectors";
 import { fetchVerifiedAbi } from "@/contracts/verified-abi";
+import { saleWindowGate } from "@/execution/guards";
 import { ethGetCode } from "@/providers/rpc";
 import { buildMintTransaction, PrepareError, type BuildMintInput } from "./builder";
 
@@ -22,9 +23,8 @@ export async function prepareMintFromEvidence(
   input: Omit<BuildMintInput, "fn" | "seadrop" | "source">,
 ): Promise<PrepareOk | PrepareFail> {
   const sale = await probeSale(input.chainKey as ChainKey, input.contract);
-  if (sale.endTime != null && sale.endTime < Date.now()) {
-    return { ok: false, code: "SALE_NOT_ACTIVE", reason: "Evidenced sale window has ended." };
-  }
+  const window = saleWindowGate(sale);
+  if (!window.ok) return window;
   if (sale.merkleRoot && !sale.seadrop && sale.priceWei == null) {
     return {
       ok: false,

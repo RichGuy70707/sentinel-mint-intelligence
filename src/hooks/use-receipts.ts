@@ -28,7 +28,7 @@ export function useReceiptTracker() {
         const n = (pollCounts.get(item.id) ?? 0) + 1;
         pollCounts.set(item.id, n);
         if (n > MAX_POLLS) {
-          useQueue.getState().patch(item.id, { status: "FAILED" });
+          useQueue.getState().patch(item.id, { status: "PENDING" });
           continue;
         }
         const project = projectsRef.current.find((p) => p.id === item.projectId);

@@ -20,6 +20,7 @@ export type ExecutionStatus =
 export type AuthorizeEvent =
   | { type: "NO_INJECTED_WALLET" }
   | { type: "USER_REJECTED" }
+  | { type: "WALLET_MISMATCH" }
   | { type: "SIGN_FAILED"; message?: string }
   | { type: "SIGNED_AND_BROADCAST"; txHash: string }
   | { type: "RECEIPT_PENDING" }
@@ -34,6 +35,8 @@ export function applyAuthorizeEvent(current: ExecutionStatus, event: AuthorizeEv
       return "NOT_AUTHORIZED";
     case "USER_REJECTED":
       return "REJECTED";
+    case "WALLET_MISMATCH":
+      return "SIGN_FAILED";
     case "SIGN_FAILED":
       return "SIGN_FAILED";
     case "SIGNED_AND_BROADCAST":

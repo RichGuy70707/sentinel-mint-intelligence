@@ -5,6 +5,7 @@ import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/primitives";
 import { CHAINS } from "@/chains/registry";
 import { applyAuthorizeEvent, canAuthorize, isUserRejection } from "@/execution/state";
+import { injectedMatchesNamed } from "@/execution/guards";
 import { useReceiptTracker } from "@/hooks/use-receipts";
 import { useCatalog } from "@/state/catalog";
 import { useQueue } from "@/state/queue";
@@ -48,8 +49,8 @@ function ExecutionPage() {
         setMsg("Wallet connected but no account was returned.");
         return;
       }
-      if (named && from.toLowerCase() !== named.address.toLowerCase()) {
-        patch(id, { status: applyAuthorizeEvent(item.status, { type: "SIGN_FAILED", message: "mismatch" }) });
+      if (named && !injectedMatchesNamed(from, named.address)) {
+        patch(id, { status: applyAuthorizeEvent(item.status, { type: "WALLET_MISMATCH" }) });
         setMsg("Injected account does not match the named wallet.");
         return;
       }

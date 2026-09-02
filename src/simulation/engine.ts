@@ -70,7 +70,7 @@ export async function simulateTransaction(chainKey: ChainKey, tx: CanonicalTx): 
   checks.push({ name: "funds", ok: true, detail: "Native value covered" });
 
   try {
-    await ethCall(chainKey, tx.to, tx.data, tx.wallet);
+    await ethCall(chainKey, tx.to, tx.data, tx.wallet, tx.value);
     checks.push({ name: "eth_call", ok: true, detail: "eth_call did not revert" });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
