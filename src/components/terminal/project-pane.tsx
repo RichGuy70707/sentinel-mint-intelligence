@@ -181,12 +181,14 @@ export function ProjectPane({ project }: { project: ProjectModel | null }) {
               <img
                 src={project.imageUrl}
                 alt=""
-                className="h-5 w-5 shrink-0 rounded-sm object-cover"
+                className="h-5 w-5 shrink-0 rounded-sm bg-raised object-cover"
                 onError={(e) => {
                   e.currentTarget.style.display = "none";
                 }}
               />
-            ) : null}
+            ) : (
+              <span className="h-5 w-5 shrink-0 rounded-sm bg-raised" aria-hidden />
+            )}
             <h2 className="truncate text-base font-medium tracking-tight">{project.name}</h2>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1">

@@ -63,3 +63,26 @@ export async function blockscoutMintTransfers(
   }
   return { items: [], used: true, error: lastError };
 }
+
+export async function blockscoutTokenMeta(
+  chainKey: ChainKey,
+  address: string,
+): Promise<{ name: string | null; symbol: string | null }> {
+  const hosts = BLOCKSCOUT_HOSTS[chainKey] ?? [];
+  for (const host of hosts) {
+    try {
+      const res = await fetch(`${host}/api/v2/tokens/${address}`, {
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(2_500),
+      });
+      if (res.status === 404) return { name: null, symbol: null };
+      if (!res.ok) continue;
+      const body = (await res.json()) as { name?: string | null; symbol?: string | null };
+      return { name: body.name ?? null, symbol: body.symbol ?? null };
+    } catch {
+      continue;
+    }
+  }
+  return { name: null, symbol: null };
+}
+

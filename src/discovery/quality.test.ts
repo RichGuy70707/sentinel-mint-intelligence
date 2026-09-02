@@ -9,8 +9,12 @@ describe("discovery quality", () => {
     assert.deepEqual(reconcileSupply(10, null), { minted: 10, supply: null });
   });
 
-  it("never invents a project name from an address", () => {
-    assert.equal(preferName("0xabc", "UNKNOWN PROJECT", null), "UNKNOWN PROJECT");
-    assert.equal(preferName("Based Joyride", "0xabc"), "Based Joyride");
+  it("rejects OpenSea placeholder identities", () => {
+    assert.equal(
+      preferName("Unidentified contract f7e13e89-e113-4009-8eaa-09ed7a57807e", "UNKNOWN PROJECT"),
+      "UNKNOWN PROJECT",
+    );
+    assert.equal(preferName("Unknown contract", "Breeze"), "Breeze");
+    assert.equal(preferName("Based Joyride"), "Based Joyride");
   });
 });

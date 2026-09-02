@@ -4,7 +4,7 @@ import { CHAINS, TRANSFER_TOPIC, ZERO_TOPIC } from "@/chains/registry";
 import { inspectContract } from "@/contracts/inspect";
 import { probeSale } from "@/contracts/sale";
 import { alchemyContractMeta, alchemyMintTransfers } from "@/providers/alchemy";
-import { blockscoutMintTransfers, tokenAddress, type BlockscoutTransfer } from "@/providers/blockscout";
+import { blockscoutMintTransfers, blockscoutTokenMeta, tokenAddress, type BlockscoutTransfer } from "@/providers/blockscout";
 import { openSeaMarket } from "@/providers/opensea";
 import { ethBlockNumber, ethGetLogs, type LogEntry } from "@/providers/rpc";
 import { intelCache } from "@/providers/ttl-cache";
@@ -266,7 +266,7 @@ function mergeProjects(a: ProjectModel[], b: ProjectModel[]): ProjectModel[] {
     }
     map.set(p.id, {
       ...prev,
-      name: looksLikeAddress(prev.name) && !looksLikeAddress(p.name) ? p.name : prev.name,
+      name: preferName(prev.name, p.name),
       symbol: prev.symbol === "UNK" ? p.symbol : prev.symbol,
       minted: Math.max(prev.minted ?? 0, p.minted ?? 0),
       uniqueMinters: Math.max(prev.uniqueMinters ?? 0, p.uniqueMinters ?? 0),
@@ -275,10 +275,6 @@ function mergeProjects(a: ProjectModel[], b: ProjectModel[]): ProjectModel[] {
     });
   }
   return [...map.values()];
-}
-
-function looksLikeAddress(name: string): boolean {
-  return name.startsWith("0x") || name.includes("…");
 }
 
 function projectFromAgg(agg: Agg, scannedAt: number, windowMin: number | null, note: string): ProjectModel {
@@ -299,7 +295,7 @@ function projectFromAgg(agg: Agg, scannedAt: number, windowMin: number | null, n
     id: `${agg.chainKey}:${agg.contract}`,
     chainKey: agg.chainKey,
     chainId: CHAINS[agg.chainKey].id,
-    name: agg.name?.trim() && !looksLikeAddress(agg.name) ? agg.name.trim() : "UNKNOWN PROJECT",
+    name: preferName(agg.name),
     symbol: agg.symbol?.trim() || "UNK",
     contract: agg.contract,
     collectionSlug: null,
@@ -346,6 +342,15 @@ async function enrichProject(p: ProjectModel): Promise<ProjectModel> {
       alchemyContractMeta(p.chainKey, contract),
       intelCache.wrap(`os:${p.chainKey}:${contract}`, 60_000, () => openSeaMarket(p.chainKey, contract)),
     ]);
+    let explorerName: string | null = null;
+    let explorerSymbol: string | null = null;
+    if (preferName(intel.name, alchemy.name, market?.collectionName, p.name) === "UNKNOWN PROJECT") {
+      const token = await intelCache.wrap(`bsmeta:${p.chainKey}:${contract}`, 10 * 60_000, () =>
+        blockscoutTokenMeta(p.chainKey, contract),
+      );
+      explorerName = token.name;
+      explorerSymbol = token.symbol;
+    }
     const priceWei = sale.priceWei ?? p.priceWei;
     const stages = deriveStagesFromIntel({
       projectId: p.id,
@@ -363,8 +368,8 @@ async function enrichProject(p: ProjectModel): Promise<ProjectModel> {
     const { minted, supply } = reconcileSupply(rawMinted, rawSupply);
     return {
       ...p,
-      name: preferName(intel.name, alchemy.name, market?.collectionName, p.name),
-      symbol: intel.symbol || alchemy.symbol || p.symbol,
+      name: preferName(intel.name, alchemy.name, explorerName, market?.collectionName, p.name),
+      symbol: intel.symbol || alchemy.symbol || explorerSymbol || p.symbol,
       imageUrl: market?.imageUrl || p.imageUrl,
       collectionSlug: p.collectionSlug,
       supply,

@@ -4,7 +4,7 @@ import { normalizeTimestamp } from "@/core/time";
 import { deriveTerminalPhase, DISCOVERY_CHAIN_COUNT, type TerminalPhase } from "@/core/terminal";
 import type { ChainKey, MintStatus, ProjectModel, StageKind, SystemHealth } from "@/core/types";
 import { resolveMintStatus } from "@/stages/engine";
-import { reconcileSupply } from "@/discovery/quality";
+import { preferName, reconcileSupply } from "@/discovery/quality";
 import { isProtocolReceiptNft } from "@/discovery/noise";
 
 export type SignalKey = "myEligible" | "readyToMint" | "requiresVerification" | "unknownEligibility";
@@ -62,8 +62,7 @@ export function sanitizeProject(project: ProjectModel): ProjectModel {
   const { minted, supply } = reconcileSupply(project.minted, project.supply);
   return {
     ...project,
-    stages,
-    minted,
+    name: preferName(project.name),
     supply,
     remaining: supply != null && minted != null ? Math.max(0, supply - minted) : null,
     status: resolveMintStatus(stages, {
