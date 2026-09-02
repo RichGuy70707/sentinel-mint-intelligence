@@ -34,3 +34,13 @@
 - ProjectPane hint effect is referentially stable (no setState-on-empty loop)
 - Per-chain discovery budget 12s; client scan budget 22s
 - Watchlist cache is not merged into scan results (prevents stale LIVE)
+
+## Execution + eligibility integrity (2026-09-02)
+
+- Provider snapshots redact `/v2/{key}` before crossing the client boundary
+- Prepare refuses unread price (never encodes value 0) and refuses assumed `mint()`
+- SeaDrop public mint is the only auto-encoded path when `getPublicDrop` is evidenced
+- Authorize without an injected wallet is NOT_AUTHORIZED, never AUTHORIZED
+- Simulation distinguishes revert vs provider error
+- NFT-gated without a gate contract is REQUIRES_VERIFICATION
+- Eligibility hints prefetch for top scanned projects
