@@ -97,3 +97,4 @@
 - Unclassified contracts stay off the primary board
 - Missing names render as UNKNOWN PROJECT
 - OpenSea 404 is collection-not-found, not an API outage
+- ERC-1155 quantities above 10,000 in one log are treated as untrusted
