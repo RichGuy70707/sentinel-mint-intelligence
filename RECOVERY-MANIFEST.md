@@ -59,3 +59,11 @@
 - Unread price still refuses value 0
 - Submitted txs poll receipts: PENDING / CONFIRMED / REVERTED; provider errors stay pending
 - Baseline checkpoint 5f8af44 before this pass
+
+## Audit P1 follow-through (2026-09-02)
+
+- Catalog persist rehydrate clears sessionFresh; first scan waits for hydration
+- Successful scans keep first-seen detectedAt
+- Protocol receipts / non-721/1155 dropped after enrich
+- Receipt tracker mounted in the shell; queue stores chainKey
+- Eligibility hint maps used on Opportunities, project detail, wallet detail, Projects filters
