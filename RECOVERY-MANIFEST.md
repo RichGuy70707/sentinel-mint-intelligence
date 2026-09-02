@@ -74,3 +74,11 @@
 - Application "execution reverted" does not fail a provider or trigger failover
 - HTTP 403/401/429 become ACCESS_DENIED / AUTH_FAILED / RATE_LIMITED and skip the slot
 - Public RPC remains fallback; header DEGRADED only when a chain has no projects and an error
+
+## Discovery data integrity (2026-09-02)
+
+- LIVE-from-activity uses window mint Transfers, not lifetime totalSupply
+- Future sale windows stay UPCOMING even if the collection already has supply
+- Evidenced sold-out (minted >= maxSupply) is ENDED
+- Duplicate mint logs are collapsed; Blockscout velocity is omitted without a time window
+- Unreadable price displays as —
