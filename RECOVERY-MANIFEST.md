@@ -132,3 +132,9 @@
 - windowMints is observed scan-window events only
 - velocity uses window activity, never totalSupply
 - rows show +activity separately from minted
+
+## Bulk activity signal (2026-09-02)
+
+- Classify BULK when one tx or one minter accounts for a large mint quantity
+- Trending/Runners down-weight BULK vs organic unique-minter activity
+- Rows show a BULK tag; pane shows tx count
