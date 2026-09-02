@@ -82,3 +82,10 @@
 - Evidenced sold-out (minted >= maxSupply) is ENDED
 - Duplicate mint logs are collapsed; Blockscout velocity is omitted without a time window
 - Unreadable price displays as —
+
+## Multi-wallet eligibility (2026-09-02)
+
+- Paid public stays UNKNOWN until native balance is read; insufficient funds is NOT_ELIGIBLE
+- NFT gates use gateTokenBalance, not mint-collection balanceOf
+- ERC-20 / decimals-without-NFT-interface tokens are not mint opportunities
+- Opportunities list wallet + reason + evidenced price
