@@ -141,7 +141,16 @@ export const useCatalog = create<CatalogState>()(
           });
           return;
         }
-        const next = dedupeProjects(projects);
+        const prevById = new Map(get().projects.map((p) => [p.id, p]));
+        const next = dedupeProjects(projects).map((p) => {
+          const prev = prevById.get(p.id);
+          if (!prev) return p;
+          return {
+            ...p,
+            detectedAt: Math.min(prev.detectedAt ?? p.detectedAt, p.detectedAt),
+            lastActivityAt: Math.max(prev.lastActivityAt ?? 0, p.lastActivityAt ?? 0) || p.lastActivityAt,
+          };
+        });
         set({
           projects: next,
           scannedAt,
@@ -181,6 +190,13 @@ export const useCatalog = create<CatalogState>()(
         selectedId: s.selectedId,
         chainFilter: s.chainFilter,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        state.sessionFresh = false;
+        state.scanFailed = false;
+        state.scanning = false;
+        state.projects = state.projects.map(sanitizeProject);
+      },
     },
   ),
 );

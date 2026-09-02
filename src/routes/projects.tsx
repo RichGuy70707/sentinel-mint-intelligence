@@ -5,9 +5,12 @@ import { MintCard } from "@/components/mint-card";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button, Input } from "@/components/ui/primitives";
 import { applyFilters, DEFAULT_FILTERS, type MintFilters } from "@/core/filters";
+import { evaluateProjectWallets } from "@/eligibility/engine";
 import { isHexAddress } from "@/core/address";
 import { inspectProjectFn } from "@/server/functions";
 import { useCatalog } from "@/state/catalog";
+import { useHints } from "@/state/hints";
+import { useWallets } from "@/state/wallets";
 import { useWatchlist } from "@/state/watchlist";
 import type { ChainKey } from "@/core/types";
 
@@ -15,6 +18,8 @@ export const Route = createFileRoute("/projects")({ component: ProjectsPage });
 
 function ProjectsPage() {
   const projects = useCatalog((s) => s.projects);
+  const wallets = useWallets((s) => s.wallets);
+  const hintStore = useHints((s) => s.byProject);
   const upsert = useCatalog((s) => s.upsert);
   const addWatch = useWatchlist((s) => s.add);
   const putCache = useWatchlist((s) => s.putCache);
@@ -23,7 +28,22 @@ function ProjectsPage() {
   const [chain, setChain] = useState<ChainKey>("eth");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const rows = useMemo(() => applyFilters(projects, filters), [projects, filters]);
+  const eligible = useMemo(() => {
+    const eligibleIds = new Set<string>();
+    const readyIds = new Set<string>();
+    const requiresVerificationIds = new Set<string>();
+    const unknownEligibilityIds = new Set<string>();
+    for (const p of projects) {
+      const rows = evaluateProjectWallets(p, wallets, hintStore[p.id] ?? {});
+      if (rows.some((r) => r.status === "ELIGIBLE")) eligibleIds.add(p.id);
+      if (rows.some((r) => r.status === "ELIGIBLE" && !r.requiresVerification)) readyIds.add(p.id);
+      if (rows.some((r) => r.status === "REQUIRES_PROOF" || r.status === "REQUIRES_VERIFICATION"))
+        requiresVerificationIds.add(p.id);
+      if (rows.some((r) => r.status === "UNKNOWN")) unknownEligibilityIds.add(p.id);
+    }
+    return { eligibleIds, readyIds, requiresVerificationIds, unknownEligibilityIds };
+  }, [projects, wallets, hintStore]);
+  const rows = useMemo(() => applyFilters(projects, { ...filters, ...eligible }), [projects, filters, eligible]);
 
   async function inspect() {
     setErr(null);

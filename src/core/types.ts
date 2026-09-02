@@ -256,6 +256,7 @@ export interface QueueItem {
     | "FAILED"
     | "CANCELLED";
   txHash: string | null;
+  chainKey?: ChainKey;
   updatedAt: number;
 }
 

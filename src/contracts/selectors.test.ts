@@ -12,6 +12,11 @@ describe("mint selector evidence", () => {
     assert.equal(bytecodeHasSelector(present, sel), true);
   });
 
+  it("does not treat PUSH20 address bytes as a mint selector", () => {
+    const sel = selectorFor("mint(uint256)");
+    const fake = `0x60806040${"73" + sel.slice(2)}00`;
+    assert.equal(detectPublicMintFn(fake), null);
+  });
   it("does not invent a selector from empty or missing code", () => {
     assert.equal(detectPublicMintFn("0x"), null);
     assert.equal(detectPublicMintFn(""), null);

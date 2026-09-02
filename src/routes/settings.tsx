@@ -20,7 +20,9 @@ function SettingsPage() {
         <p>Discovery uses Blockscout public mint feeds plus chunked eth_getLogs. Alchemy and OpenSea adapters arm only when their environment keys are present — never hardcoded.</p>
         <p>Configure OPENSEA_API_KEY / OPENSEA_API_KEY_2 / OPENSEA_API_KEY_3 and ALCHEMY_API_KEY / ALCHEMY_API_KEY_2 / ALCHEMY_API_KEY_3 as server environment variables. Missing keys keep those adapters dark and related fields marked UNKNOWN.</p>
         <ul className="space-y-1 font-mono text-[12px]">
-          {notes.map((n) => (
+          {notes
+            .filter((n) => !/HTTP |timeout|ECONN|JSON-RPC/i.test(n) || /OpenSea:|Alchemy:/.test(n))
+            .map((n) => (
             <li key={n}>{n}</li>
           ))}
         </ul>

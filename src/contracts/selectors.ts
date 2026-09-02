@@ -16,7 +16,7 @@ export function bytecodeHasSelector(bytecode: string, selector: string): boolean
   if (hex.length < 8 || hex === "0" || hex === "") return false;
   const sel = selector.toLowerCase().replace(/^0x/, "");
   if (sel.length !== 8) return false;
-  return hex.includes(`63${sel}`) || hex.includes(`73${sel}`);
+  return hex.includes(`63${sel}`);
 }
 
 /** Only returns a mint fn when its 4-byte selector is present in runtime bytecode. */

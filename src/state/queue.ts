@@ -25,6 +25,7 @@ export const useQueue = create<QueueState>()(
           simulation: item.simulation ?? null,
           status: item.status,
           txHash: item.txHash ?? null,
+          chainKey: item.chainKey,
           updatedAt: Date.now(),
         };
         const exists = get().items.some((i) => i.id === id);
@@ -37,7 +38,14 @@ export const useQueue = create<QueueState>()(
         }),
       remove: (id) => set({ items: get().items.filter((i) => i.id !== id) }),
     }),
-    { name: "sentinel.queue.v1" },
+    { name: "sentinel.queue.v1",
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        state.items = state.items.map((i) =>
+          i.status === "AWAITING_WALLET" && i.preparedTx ? { ...i, status: "READY" } : i,
+        );
+      },
+    },
   ),
 );
 

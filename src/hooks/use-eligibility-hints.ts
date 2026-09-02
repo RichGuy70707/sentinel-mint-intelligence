@@ -10,8 +10,9 @@ export function useEligibilityHints() {
   const sessionFresh = useCatalog((s) => s.sessionFresh);
   const wallets = useWallets((s) => s.wallets);
   const setProjectHints = useHints((s) => s.setProjectHints);
-  const token = `${sessionFresh}:${wallets.map((w) => w.id).join("|")}:${projects
-    .slice(0, 6)
+  const scannedAt = useCatalog((s) => s.scannedAt);
+  const token = `${sessionFresh}:${scannedAt}:${wallets.map((w) => w.id).join("|")}:${projects
+    .slice(0, 8)
     .map((p) => p.id)
     .join("|")}`;
   const last = useRef("");
@@ -20,11 +21,11 @@ export function useEligibilityHints() {
     if (!sessionFresh || wallets.length === 0) return;
     if (last.current === token) return;
     last.current = token;
-    const targets = projects.filter((p) => p.contract).slice(0, 6);
+    const targets = projects.filter((p) => p.contract).slice(0, 8);
     let cancelled = false;
     void (async () => {
       for (const p of targets) {
-        if (cancelled || !p.contract) return;
+        if (cancelled || !p.contract) continue;
         try {
           const rows = await walletHintsFn({
             data: { chainKey: p.chainKey, contract: p.contract, wallets: wallets.map((w) => w.address) },

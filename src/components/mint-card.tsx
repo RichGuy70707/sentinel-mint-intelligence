@@ -29,7 +29,9 @@ export function MintCard({ project }: { project: ProjectModel }) {
           </div>
         </div>
         <div className="text-right">
-          <div className="text-[10px] uppercase tracking-[0.12em] text-subtle">{live ? "Remaining" : "Starts"}</div>
+          <div className="text-[10px] uppercase tracking-[0.12em] text-subtle">
+            {project.status === "LIVE" && !live ? "LIVE" : live ? "Remaining" : "Starts"}
+          </div>
           <div className="mt-1 text-sm">
             <Countdown startTime={stage?.startTime ?? null} endTime={stage?.endTime ?? null} />
           </div>

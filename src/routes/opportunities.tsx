@@ -5,6 +5,7 @@ import { Countdown } from "@/components/countdown";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { evaluateProjectWallets, pickRelevantStage } from "@/eligibility/engine";
 import { useCatalog } from "@/state/catalog";
+import { useHints } from "@/state/hints";
 import { useWallets } from "@/state/wallets";
 
 export const Route = createFileRoute("/opportunities")({ component: OpportunitiesPage });
@@ -12,16 +13,17 @@ export const Route = createFileRoute("/opportunities")({ component: Opportunitie
 function OpportunitiesPage() {
   const projects = useCatalog((s) => s.projects);
   const wallets = useWallets((s) => s.wallets);
+  const hintStore = useHints((s) => s.byProject);
 
   const rows = useMemo(() => {
     return projects.flatMap((project) =>
-      evaluateProjectWallets(project, wallets).map((result) => ({
+      evaluateProjectWallets(project, wallets, hintStore[project.id] ?? {}).map((result) => ({
         project,
         result,
         stage: pickRelevantStage(project),
       })),
     );
-  }, [projects, wallets]);
+  }, [projects, wallets, hintStore]);
 
   const live = rows.filter((r) => r.result.status === "ELIGIBLE" && r.project.status === "LIVE");
   const soon = rows.filter(
@@ -77,12 +79,4 @@ function Section({
       </div>
     </section>
   );
-}
-
-function listShape() {
-  return [] as {
-    project: import("@/core/types").ProjectModel;
-    result: import("@/core/types").EligibilityResult;
-    stage: import("@/core/types").StageModel | null;
-  }[];
 }

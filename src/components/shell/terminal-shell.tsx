@@ -7,6 +7,7 @@ import { isHexAddress, normalizeAddress } from "@/core/address";
 import type { TerminalPhase } from "@/core/terminal";
 import { applyFilters, DEFAULT_FILTERS } from "@/core/filters";
 import { useScanner } from "@/hooks/use-scanner";
+import { useReceiptTracker } from "@/hooks/use-receipts";
 import { cn } from "@/lib/cn";
 import { inspectProjectFn } from "@/server/functions";
 import { useAlerts } from "@/state/alerts";
@@ -51,15 +52,23 @@ export function TerminalShell({ children }: PropsWithChildren) {
   const health = useCatalog((s) => s.health);
   const errors = useCatalog((s) => s.errors);
   const scan = useScanner();
+  useReceiptTracker();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [tools, setTools] = useState(false);
   const [walletNote, setWalletNote] = useState<string | null>(null);
 
   useEffect(() => {
-    void scan();
-    const id = window.setInterval(() => void scan(), 20_000);
-    return () => window.clearInterval(id);
+    let interval: number | undefined;
+    const start = () => {
+      void scan();
+      interval = window.setInterval(() => void scan(), 20_000);
+    };
+    if (useCatalog.persist.hasHydrated()) start();
+    else useCatalog.persist.onFinishHydration(start);
+    return () => {
+      if (interval != null) window.clearInterval(interval);
+    };
   }, [scan]);
 
   const hits = useMemo(

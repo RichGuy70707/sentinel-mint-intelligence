@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChainBadge, EligibilityBadge, StageBadge, StatusBadge } from "@/components/badges";
 import { Countdown } from "@/components/countdown";
 import { EmptyState, Page, PageHeader } from "@/components/page";
@@ -7,6 +7,7 @@ import { Button, Input } from "@/components/ui/primitives";
 import { shortAddress } from "@/core/address";
 import { formatWhen } from "@/core/time";
 import { evaluateProjectWallets, pickRelevantStage } from "@/eligibility/engine";
+import { useHints } from "@/state/hints";
 import { formatEth, formatInt } from "@/lib/format";
 import { inspectProjectFn, prepareMintFn, simulateMintFn } from "@/server/functions";
 import { currentStage, nextStage, stagePhase } from "@/stages/engine";
@@ -23,6 +24,7 @@ function ProjectDetail() {
   const project = useCatalog((s) => s.projects.find((p) => p.id === decoded));
   const upsert = useCatalog((s) => s.upsert);
   const wallets = useWallets((s) => s.wallets);
+  const hintMap = useHints((s) => s.byProject[decoded]);
   const upsertQueue = useQueue((s) => s.upsert);
   const push = useAlerts((s) => s.push);
   const [qty, setQty] = useState(1);
@@ -30,7 +32,14 @@ function ProjectDetail() {
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
-  const rows = useMemo(() => (project ? evaluateProjectWallets(project, wallets) : []), [project, wallets]);
+  useEffect(() => {
+    if (!walletId && wallets[0]) setWalletId(wallets[0].id);
+  }, [wallets, walletId]);
+
+  const rows = useMemo(
+    () => (project ? evaluateProjectWallets(project, wallets, hintMap ?? {}) : []),
+    [project, wallets, hintMap],
+  );
   const live = project ? currentStage(project) : null;
   const nxt = project ? nextStage(project) : null;
 
@@ -82,6 +91,7 @@ function ProjectDetail() {
           simulation: null,
           status: "PREPARATION_FAILED",
           txHash: null,
+          chainKey: project.chainKey,
         });
         setNote(`${prepared.code}: ${prepared.reason}`);
         return;
@@ -96,6 +106,7 @@ function ProjectDetail() {
         simulation: sim,
         status: sim.status === "READY" ? "READY" : sim.status === "SIMULATION_FAILED" ? "SIMULATION_FAILED" : "SIMULATED",
         txHash: null,
+        chainKey: project.chainKey,
       });
       setNote(`${sim.kind}: ${sim.explanation}`);
       if (sim.status === "READY") push("TX_READY", "Simulation ready", `${project.name} / ${wallet.name}`);

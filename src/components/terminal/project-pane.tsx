@@ -37,6 +37,10 @@ export function ProjectPane({ project }: { project: ProjectModel | null }) {
   const walletKey = wallets.map((w) => `${w.id}:${w.address.toLowerCase()}`).join("|");
 
   useEffect(() => {
+    if (!walletId && wallets[0]) setWalletId(wallets[0].id);
+  }, [wallets, walletId]);
+
+  useEffect(() => {
     const clear = !projectId || !contract || !chainKey || walletKey.length === 0;
     if (clear) {
       setHints((prev) => nextHintMap(prev, {}, true));
@@ -139,6 +143,7 @@ export function ProjectPane({ project }: { project: ProjectModel | null }) {
           simulation: null,
           status: "PREPARATION_FAILED",
           txHash: null,
+          chainKey: project.chainKey,
         });
         setNote(`${prepared.code}: ${prepared.reason}`);
         return;
@@ -153,6 +158,7 @@ export function ProjectPane({ project }: { project: ProjectModel | null }) {
         simulation: sim,
         status: sim.status === "READY" ? "READY" : sim.status === "SIMULATION_FAILED" ? "SIMULATION_FAILED" : "SIMULATED",
         txHash: null,
+        chainKey: project.chainKey,
       });
       setNote(`${sim.kind}: ${sim.explanation}`);
       if (sim.status === "READY") push("TX_READY", "Simulation ready", `${project.name} / ${wallet.name}`);

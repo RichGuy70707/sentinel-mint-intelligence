@@ -4,6 +4,7 @@ import { EmptyState, Page, PageHeader } from "@/components/page";
 import { shortAddress } from "@/core/address";
 import { evaluateProjectWallets } from "@/eligibility/engine";
 import { useCatalog } from "@/state/catalog";
+import { useHints } from "@/state/hints";
 import { useWallets } from "@/state/wallets";
 
 export const Route = createFileRoute("/wallets/$id")({ component: WalletDetail });
@@ -12,6 +13,7 @@ function WalletDetail() {
   const { id } = Route.useParams();
   const wallet = useWallets((s) => s.wallets.find((w) => w.id === id));
   const projects = useCatalog((s) => s.projects);
+  const hintStore = useHints((s) => s.byProject);
 
   if (!wallet) {
     return (
@@ -21,7 +23,9 @@ function WalletDetail() {
     );
   }
 
-  const rows = projects.flatMap((p) => evaluateProjectWallets(p, [wallet]).map((r) => ({ project: p, result: r })));
+  const rows = projects.flatMap((p) =>
+    evaluateProjectWallets(p, [wallet], hintStore[p.id] ?? {}).map((r) => ({ project: p, result: r })),
+  );
 
   return (
     <Page>

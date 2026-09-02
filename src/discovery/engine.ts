@@ -100,7 +100,8 @@ async function scanChain(
       errors.push({ chainKey, message: scout.error });
     }
     const enriched = await withBudget(enrichTop(chainKey, merged, 6), 10_000, merged.slice(0, 8));
-    return { projects: enriched, errors, scannedBlocks, sources, timedOut: false };
+    const cleaned = enriched.filter((p) => keepDiscovered(p));
+    return { projects: cleaned, errors, scannedBlocks, sources, timedOut: false };
   } catch (err) {
     errors.push({
       chainKey,
@@ -281,7 +282,7 @@ function projectFromAgg(agg: Agg, scannedAt: number, windowMin: number, note: st
     remaining: null,
     minted,
     priceWei: null,
-    status: "LIVE",
+    status: "UNKNOWN",
     detectedAt: scannedAt,
     lastActivityAt: scannedAt,
     mintVelocityPerMin: Number((agg.mints / windowMin).toFixed(2)),
@@ -357,6 +358,18 @@ async function enrichProject(p: ProjectModel): Promise<ProjectModel> {
   } catch {
     return p;
   }
+}
+
+function keepDiscovered(p: ProjectModel): boolean {
+  if (isProtocolReceiptNft(p)) return false;
+  if (
+    p.interfaces.length > 0 &&
+    !p.interfaces.includes("ERC721") &&
+    !p.interfaces.includes("ERC1155")
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function hex(n: number): string {
