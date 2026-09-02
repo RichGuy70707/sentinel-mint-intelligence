@@ -45,10 +45,8 @@ export function ProjectRow({
       </div>
       <div className="mt-0.5 flex flex-wrap gap-x-2.5 font-mono text-[10px] text-muted">
         <span>{formatEth(project.priceWei ?? stage?.priceWei)}</span>
-        <span>
-          {formatInt(project.minted)}
-          {project.supply != null ? `/${formatInt(project.supply)}` : ""}
-        </span>
+        <span>{formatInt(project.minted)}</span>
+        <span>{project.windowMints == null ? "—" : `+${formatInt(project.windowMints)}`}</span>
         <span>{project.mintVelocityPerMin == null ? "—" : `${project.mintVelocityPerMin}/m`}</span>
       </div>
       {rows.length > 0 && (

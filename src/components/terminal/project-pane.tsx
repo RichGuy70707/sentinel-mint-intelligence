@@ -208,15 +208,12 @@ export function ProjectPane({ project }: { project: ProjectModel | null }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-px border-b border-line bg-line">
+      <div className="grid grid-cols-5 gap-px border-b border-line bg-line">
         <Metric label="Price" value={formatEth(project.priceWei ?? stage?.priceWei)} />
+        <Metric label="Minted" value={formatInt(minted)} />
         <Metric
-          label="Minted"
-          value={
-            supply != null
-              ? `${formatInt(minted)}/${formatInt(supply)}`
-              : formatInt(minted)
-          }
+          label="Activity"
+          value={project.windowMints == null ? "—" : `+${formatInt(project.windowMints)}`}
         />
         <Metric label="Vel" value={project.mintVelocityPerMin == null ? "—" : `${project.mintVelocityPerMin}/m`} />
         <Metric label="Unique" value={formatInt(project.uniqueMinters)} />
@@ -239,7 +236,8 @@ export function ProjectPane({ project }: { project: ProjectModel | null }) {
         <KV k="Mint" v={project.mintMethod ?? "UNKNOWN"} />
         <KV k="Stage" v={stage ? `${stage.label} · ${stagePhase(stage)}` : "UNKNOWN"} />
         <KV k="Window" v={`${formatWhen(stage?.startTime ?? null)} → ${formatWhen(stage?.endTime ?? null)}`} />
-        <KV k="Activity" v={project.windowMints != null ? formatInt(project.windowMints) : "—"} />
+        <KV k="Cap" v={supply != null ? formatInt(supply) : "UNKNOWN"} />
+        <KV k="Activity" v={project.windowMints != null ? `+${formatInt(project.windowMints)}` : "—"} />
       </div>
 
       <div className="grid grid-cols-3 gap-x-4 border-b border-line px-3 py-2 text-[11px]">

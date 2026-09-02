@@ -29,3 +29,20 @@ export function preferName(...names: Array<string | null | undefined>): string {
   }
   return "UNKNOWN PROJECT";
 }
+
+export function splitMintStats(input: {
+  totalSupply: number | null;
+  windowMints: number | null;
+  maxSupply: number | null;
+}): { minted: number | null; windowMints: number | null; supply: number | null } {
+  const minted =
+    input.totalSupply != null && Number.isFinite(input.totalSupply) && input.totalSupply >= 0
+      ? Math.floor(input.totalSupply)
+      : null;
+  const windowMints =
+    input.windowMints != null && Number.isFinite(input.windowMints) && input.windowMints >= 0
+      ? Math.floor(input.windowMints)
+      : null;
+  const { supply } = reconcileSupply(minted, input.maxSupply);
+  return { minted, windowMints, supply };
+}

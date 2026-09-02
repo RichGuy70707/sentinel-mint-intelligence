@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { preferName, reconcileSupply } from "./quality.ts";
+import { preferName, reconcileSupply, splitMintStats } from "./quality.ts";
 
 describe("discovery quality", () => {
   it("drops conflicting supply when minted exceeds cap", () => {
@@ -16,5 +16,18 @@ describe("discovery quality", () => {
     );
     assert.equal(preferName("Unknown contract", "Breeze"), "Breeze");
     assert.equal(preferName("Based Joyride"), "Based Joyride");
+    assert.equal(preferName("0xabc", "UNKNOWN PROJECT", null), "UNKNOWN PROJECT");
+  });
+
+  it("keeps lifetime minted separate from scan-window activity", () => {
+    const split = splitMintStats({ totalSupply: 3_777_484, windowMints: 12, maxSupply: 5_555 });
+    assert.equal(split.minted, 3_777_484);
+    assert.equal(split.windowMints, 12);
+    assert.equal(split.supply, null);
+    assert.deepEqual(splitMintStats({ totalSupply: null, windowMints: 18, maxSupply: 1000 }), {
+      minted: null,
+      windowMints: 18,
+      supply: 1000,
+    });
   });
 });

@@ -12,7 +12,7 @@ import { deriveStagesFromIntel, resolveMintStatus } from "@/stages/engine";
 import { classifyTransferLog, ERC1155_TRANSFER_BATCH } from "./mint-logs";
 import { isFungibleToken, keepMintCandidate } from "./token-class";
 import { isProtocolReceiptNft, receiptLabel } from "./noise";
-import { preferName, reconcileSupply } from "./quality";
+import { preferName, splitMintStats } from "./quality";
 import { dedupeMintLogs, saneSupply, velocityPerMin } from "./activity";
 
 const SCAN_BLOCKS: Record<ChainKey, number> = {
@@ -268,9 +268,15 @@ function mergeProjects(a: ProjectModel[], b: ProjectModel[]): ProjectModel[] {
       ...prev,
       name: preferName(prev.name, p.name),
       symbol: prev.symbol === "UNK" ? p.symbol : prev.symbol,
-      minted: Math.max(prev.minted ?? 0, p.minted ?? 0),
+      minted: prev.minted ?? p.minted,
+      windowMints: Math.max(prev.windowMints ?? 0, p.windowMints ?? 0) || (prev.windowMints ?? p.windowMints),
       uniqueMinters: Math.max(prev.uniqueMinters ?? 0, p.uniqueMinters ?? 0),
-      mintVelocityPerMin: Math.max(prev.mintVelocityPerMin ?? 0, p.mintVelocityPerMin ?? 0),
+      mintVelocityPerMin:
+        prev.mintVelocityPerMin == null
+          ? p.mintVelocityPerMin
+          : p.mintVelocityPerMin == null
+            ? prev.mintVelocityPerMin
+            : Math.max(prev.mintVelocityPerMin, p.mintVelocityPerMin),
       supply: prev.supply ?? p.supply,
     });
   }
@@ -305,7 +311,7 @@ function projectFromAgg(agg: Agg, scannedAt: number, windowMin: number | null, n
     stages,
     supply: saneSupply(agg.supplyHint ?? null),
     remaining: null,
-    minted: agg.mints,
+    minted: null,
     windowMints: agg.mints,
     priceWei: null,
     status: "UNKNOWN",
@@ -362,10 +368,14 @@ async function enrichProject(p: ProjectModel): Promise<ProjectModel> {
       seadrop: sale.seadrop,
       merkleRoot: sale.merkleRoot,
     });
-    const windowMints = p.windowMints ?? p.minted ?? 0;
-    const rawMinted = saneSupply(intel.totalSupply ? Number(intel.totalSupply) : windowMints) ?? windowMints;
-    const rawSupply = saneSupply(intel.maxSupply ? Number(intel.maxSupply) : p.supply);
-    const { minted, supply } = reconcileSupply(rawMinted, rawSupply);
+    const windowMints = p.windowMints ?? null;
+    const rawLifetime = intel.totalSupply ? Number(intel.totalSupply) : null;
+    const rawSupply = intel.maxSupply ? Number(intel.maxSupply) : p.supply;
+    const { minted, supply } = splitMintStats({
+      totalSupply: saneSupply(rawLifetime),
+      windowMints,
+      maxSupply: saneSupply(rawSupply),
+    });
     return {
       ...p,
       name: preferName(intel.name, alchemy.name, explorerName, market?.collectionName, p.name),
