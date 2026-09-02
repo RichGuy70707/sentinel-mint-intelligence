@@ -89,3 +89,11 @@
 - NFT gates use gateTokenBalance, not mint-collection balanceOf
 - ERC-20 / decimals-without-NFT-interface tokens are not mint opportunities
 - Opportunities list wallet + reason + evidenced price
+
+## Discovery hardening (2026-09-02)
+
+- 3-topic Transfer is ERC-20 and is excluded from the mint rail
+- ERC-721 requires the tokenId topic; ERC-1155 counts TransferSingle quantity
+- Unclassified contracts stay off the primary board
+- Missing names render as UNKNOWN PROJECT
+- OpenSea 404 is collection-not-found, not an API outage
