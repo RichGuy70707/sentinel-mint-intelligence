@@ -2,7 +2,16 @@ import { isHexAddress, normalizeAddress } from "@/core/address";
 import type { ChainKey, Confidence, Provenance } from "@/core/types";
 import { CHAINS } from "@/chains/registry";
 import { ethCall, ethGetCode } from "@/providers/rpc";
+import { intelCache } from "@/providers/ttl-cache";
 import { decodeCall, encodeCall, ERC165_ABI, ERC721_ABI, IERC165 } from "./abi";
+import type { Abi } from "viem";
+
+const SUPPLY_ABI = [
+  { type: "function", name: "maxSupply", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "MAX_SUPPLY", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "maxTokens", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "collectionSize", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+] as const satisfies Abi;
 
 export interface ContractIntel {
   chainKey: ChainKey;
@@ -22,6 +31,10 @@ export interface ContractIntel {
 export async function inspectContract(chainKey: ChainKey, rawAddress: string): Promise<ContractIntel> {
   if (!isHexAddress(rawAddress)) throw new Error("Invalid contract address");
   const address = normalizeAddress(rawAddress);
+  return intelCache.wrap(`inspect:${chainKey}:${address}`, 45_000, () => inspectFresh(chainKey, address));
+}
+
+async function inspectFresh(chainKey: ChainKey, address: string): Promise<ContractIntel> {
   const code = await ethGetCode(chainKey, address);
   const bytecodePresent = Boolean(code && code !== "0x" && code !== "0x0");
   const interfaces: string[] = [];
@@ -57,21 +70,32 @@ export async function inspectContract(chainKey: ChainKey, rawAddress: string): P
         return null;
       }
     };
-    const readUint = async (fn: "totalSupply" | "maxSupply") => {
+    const readUint = async () => {
       try {
-        const data = encodeCall(ERC721_ABI, fn, []);
+        const data = encodeCall(ERC721_ABI, "totalSupply", []);
         const raw = (await ethCall(chainKey, address, data)) as `0x${string}`;
-        const value = decodeCall<bigint>(ERC721_ABI, fn, raw);
-        return value.toString();
+        return decodeCall<bigint>(ERC721_ABI, "totalSupply", raw).toString();
       } catch {
         return null;
       }
     };
+    const readMax = async () => {
+      for (const fn of ["maxSupply", "MAX_SUPPLY", "maxTokens", "collectionSize"] as const) {
+        try {
+          const data = encodeCall(SUPPLY_ABI, fn, []);
+          const raw = (await ethCall(chainKey, address, data)) as `0x${string}`;
+          return decodeCall<bigint>(SUPPLY_ABI, fn, raw).toString();
+        } catch {
+          continue;
+        }
+      }
+      return null;
+    };
     [name, symbol, totalSupply, maxSupply] = await Promise.all([
       readString("name"),
       readString("symbol"),
-      readUint("totalSupply"),
-      readUint("maxSupply"),
+      readUint(),
+      readMax(),
     ]);
   }
 
@@ -79,15 +103,6 @@ export async function inspectContract(chainKey: ChainKey, rawAddress: string): P
   if (interfaces.includes("ERC1155")) contractType = "ERC-1155";
   else if (interfaces.includes("ERC721")) contractType = "ERC-721";
   else if (bytecodePresent) contractType = "UNKNOWN_CONTRACT";
-
-  const provenance: Provenance = {
-    source: "ON_CHAIN",
-    quality: bytecodePresent ? "LIVE" : "UNKNOWN",
-    confidence: bytecodePresent ? "HIGH" : "NONE",
-    fetchedAt: Date.now(),
-    ttlMs: 60_000,
-    note: bytecodePresent ? "eth_getCode + eth_call" : "No bytecode at address",
-  };
 
   return {
     chainKey,
@@ -101,7 +116,14 @@ export async function inspectContract(chainKey: ChainKey, rawAddress: string): P
     maxSupply,
     interfaces,
     contractType,
-    provenance,
+    provenance: {
+      source: "ON_CHAIN",
+      quality: bytecodePresent ? "LIVE" : "UNKNOWN",
+      confidence: bytecodePresent ? "HIGH" : "NONE",
+      fetchedAt: Date.now(),
+      ttlMs: 45_000,
+      note: bytecodePresent ? "eth_getCode + eth_call" : "No bytecode at address",
+    },
   };
 }
 

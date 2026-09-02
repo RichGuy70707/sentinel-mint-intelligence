@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { classifyMintStatus, normalizeTimestamp } from "@/core/time";
+import { normalizeTimestamp } from "@/core/time";
 import type { ChainKey, MintStatus, ProjectModel, StageKind, SystemHealth } from "@/core/types";
+import { resolveMintStatus } from "@/stages/engine";
 
 export type SignalKey = "myEligible" | "readyToMint" | "requiresVerification" | "unknownEligibility";
 
@@ -55,7 +56,7 @@ export function sanitizeProject(project: ProjectModel): ProjectModel {
   return {
     ...project,
     stages,
-    status: classifyMintStatus(stages),
+    status: resolveMintStatus(stages, { minted: project.minted }),
   };
 }
 

@@ -16,7 +16,7 @@
     "preview:stop": "node scripts/preview.mjs stop",
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
-    "test": "node --experimental-strip-types --test src/core/address.test.ts src/core/time.test.ts src/core/filters.test.ts src/core/logic.test.ts src/providers/pool.test.ts src/providers/blockscout.test.ts src/eligibility/engine.test.ts src/lib/app-data/app-data.test.ts src/lib/auth/gate-identity.test.ts",
+    "test": "node --experimental-strip-types --test src/core/address.test.ts src/core/time.test.ts src/core/filters.test.ts src/core/logic.test.ts src/providers/pool.test.ts src/providers/blockscout.test.ts src/eligibility/engine.test.ts src/discovery/noise.test.ts src/stages/engine.test.ts src/lib/app-data/app-data.test.ts src/lib/auth/gate-identity.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

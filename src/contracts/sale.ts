@@ -15,11 +15,26 @@ const PRICE_ABI = [
   { type: "function", name: "mint_price", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
 ] as const satisfies Abi;
 
+const WINDOW_ABI = [
+  { type: "function", name: "saleStart", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "saleEnd", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "publicSaleStart", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "publicSaleEnd", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "startTime", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "endTime", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+] as const satisfies Abi;
+
+const MERKLE_ABI = [
+  { type: "function", name: "merkleRoot", stateMutability: "view", inputs: [], outputs: [{ type: "bytes32" }] },
+  { type: "function", name: "allowListRoot", stateMutability: "view", inputs: [], outputs: [{ type: "bytes32" }] },
+] as const satisfies Abi;
+
 const OWNER_ABI = [
   { type: "function", name: "owner", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
 ] as const satisfies Abi;
 
 const SEADROP = "0x00005ea00ac477b1030ce78506496e8c2de24bf5";
+const ZERO_ROOT = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
 export interface SaleIntel {
   priceWei: string | null;
@@ -27,6 +42,7 @@ export interface SaleIntel {
   startTime: number | null;
   endTime: number | null;
   seadrop: boolean;
+  merkleRoot: boolean;
   owner: string | null;
   source: string;
 }
@@ -38,6 +54,7 @@ export async function probeSale(chainKey: ChainKey, address: string): Promise<Sa
     startTime: null,
     endTime: null,
     seadrop: false,
+    merkleRoot: false,
     owner: null,
     source: "none",
   };
@@ -92,6 +109,15 @@ export async function probeSale(chainKey: ChainKey, address: string): Promise<Sa
     }
   }
 
+  if (result.startTime == null) {
+    result.startTime = await readWindow(chainKey, address, ["saleStart", "publicSaleStart", "startTime"]);
+  }
+  if (result.endTime == null) {
+    result.endTime = await readWindow(chainKey, address, ["saleEnd", "publicSaleEnd", "endTime"]);
+  }
+
+  result.merkleRoot = await readMerklePresent(chainKey, address);
+
   try {
     const data = encodeCall(OWNER_ABI, "owner", []);
     const raw = (await ethCall(chainKey, address, data)) as `0x${string}`;
@@ -107,4 +133,37 @@ export async function probeSale(chainKey: ChainKey, address: string): Promise<Sa
   }
 
   return result;
+}
+
+async function readWindow(
+  chainKey: ChainKey,
+  address: string,
+  fns: Array<"saleStart" | "saleEnd" | "publicSaleStart" | "publicSaleEnd" | "startTime" | "endTime">,
+): Promise<number | null> {
+  for (const fn of fns) {
+    try {
+      const data = encodeCall(WINDOW_ABI, fn, []);
+      const raw = (await ethCall(chainKey, address, data)) as `0x${string}`;
+      const value = decodeCall<bigint>(WINDOW_ABI, fn, raw);
+      const ts = normalizeTimestamp(Number(value) > 1e12 ? Number(value) : Number(value) * 1000);
+      if (ts != null) return ts;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+async function readMerklePresent(chainKey: ChainKey, address: string): Promise<boolean> {
+  for (const fn of ["merkleRoot", "allowListRoot"] as const) {
+    try {
+      const data = encodeCall(MERKLE_ABI, fn, []);
+      const raw = (await ethCall(chainKey, address, data)) as `0x${string}`;
+      const value = decodeCall<string>(MERKLE_ABI, fn, raw);
+      if (value && value.toLowerCase() !== ZERO_ROOT) return true;
+    } catch {
+      continue;
+    }
+  }
+  return false;
 }

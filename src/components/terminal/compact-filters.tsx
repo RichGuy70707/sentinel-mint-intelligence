@@ -5,7 +5,7 @@ import { useCatalog, type SignalKey } from "@/state/catalog";
 
 const CHAINS: Array<"ALL" | ChainKey> = ["ALL", "eth", "rh", "ink", "base"];
 const PRICES = ["ALL", "FREE", "PAID"] as const;
-const STAGES: Array<"ALL" | StageKind> = ["ALL", "PUBLIC", "FCFS", "ALLOWLIST", "OTHER"];
+const STAGES: Array<"ALL" | StageKind> = ["ALL", "PUBLIC", "FCFS", "ALLOWLIST", "MERKLE", "SEADROP", "OTHER"];
 const STATUSES: Array<"ALL" | MintStatus> = ["ALL", "UPCOMING", "LIVE", "ENDED"];
 const SIGNALS: Array<{ key: SignalKey; label: string }> = [
   { key: "myEligible", label: "Eligible" },

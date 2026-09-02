@@ -3,6 +3,7 @@ import { EligibilityBadge, StageBadge } from "@/components/badges";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { evaluateProjectWallets, pickRelevantStage } from "@/eligibility/engine";
 import { useCatalog } from "@/state/catalog";
+import { useHints } from "@/state/hints";
 import { useWallets } from "@/state/wallets";
 
 export const Route = createFileRoute("/eligibility")({ component: EligibilityPage });
@@ -10,9 +11,14 @@ export const Route = createFileRoute("/eligibility")({ component: EligibilityPag
 function EligibilityPage() {
   const projects = useCatalog((s) => s.projects);
   const wallets = useWallets((s) => s.wallets);
+  const byProject = useHints((s) => s.byProject);
   const rows = projects.flatMap((project) => {
     const stage = pickRelevantStage(project);
-    return evaluateProjectWallets(project, wallets).map((result) => ({ project, stage, result }));
+    return evaluateProjectWallets(project, wallets, byProject[project.id] ?? {}).map((result) => ({
+      project,
+      stage,
+      result,
+    }));
   });
 
   return (

@@ -1,17 +1,18 @@
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChainBadge, EligibilityBadge, StageBadge, StatusBadge } from "@/components/badges";
 import { Countdown } from "@/components/countdown";
 import { Button, Input } from "@/components/ui/primitives";
 import { shortAddress } from "@/core/address";
 import { formatWhen } from "@/core/time";
 import type { ProjectModel } from "@/core/types";
-import { evaluateProjectWallets, pickRelevantStage } from "@/eligibility/engine";
+import { evaluateProjectWallets, pickRelevantStage, type OnChainHints } from "@/eligibility/engine";
 import { formatEth, formatInt } from "@/lib/format";
-import { inspectProjectFn, prepareMintFn, simulateMintFn } from "@/server/functions";
+import { inspectProjectFn, prepareMintFn, simulateMintFn, walletHintsFn } from "@/server/functions";
 import { currentStage, nextStage, stagePhase } from "@/stages/engine";
 import { useAlerts } from "@/state/alerts";
 import { useCatalog } from "@/state/catalog";
+import { useHints } from "@/state/hints";
 import { useQueue } from "@/state/queue";
 import { useWallets } from "@/state/wallets";
 
@@ -20,10 +21,60 @@ export function ProjectPane({ project }: { project: ProjectModel | null }) {
   const upsert = useCatalog((s) => s.upsert);
   const upsertQueue = useQueue((s) => s.upsert);
   const push = useAlerts((s) => s.push);
+  const setProjectHints = useHints((s) => s.setProjectHints);
+  const storedHints = useHints((s) => (project ? s.byProject[project.id] : undefined));
   const [qty, setQty] = useState(1);
   const [walletId, setWalletId] = useState(wallets[0]?.id ?? "");
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [hints, setHints] = useState<Record<string, OnChainHints>>({});
+
+  const projectId = project?.id ?? "";
+  const contract = project?.contract ?? "";
+  const chainKey = project?.chainKey;
+  const walletKey = wallets.map((w) => `${w.id}:${w.address}`).join("|");
+
+  useEffect(() => {
+    if (!projectId || !contract || !chainKey || wallets.length === 0) {
+      setHints({});
+      return;
+    }
+    let cancelled = false;
+    walletHintsFn({
+      data: {
+        chainKey,
+        contract,
+        wallets: wallets.map((w) => w.address),
+      },
+    })
+      .then((rows) => {
+        if (cancelled) return;
+        const next: Record<string, OnChainHints> = {};
+        for (const w of wallets) {
+          const row = rows.find((r) => r.address.toLowerCase() === w.address.toLowerCase());
+          if (row) {
+            next[w.id] = {
+              nftBalance: row.nftBalance ?? undefined,
+              nativeBalanceWei: row.nativeBalanceWei ?? undefined,
+            };
+          }
+        }
+        setHints(next);
+        setProjectHints(projectId, next);
+      })
+      .catch(() => {
+        if (!cancelled) setHints({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, contract, chainKey, walletKey, wallets, setProjectHints]);
+
+  const hintMap = Object.keys(hints).length ? hints : (storedHints ?? {});
+  const evs = useMemo(
+    () => (project ? evaluateProjectWallets(project, wallets, hintMap) : []),
+    [project, wallets, hintMap],
+  );
 
   if (!project) {
     return (
@@ -39,7 +90,6 @@ export function ProjectPane({ project }: { project: ProjectModel | null }) {
   const live = currentStage(project);
   const nxt = nextStage(project);
   const stage = live ?? pickRelevantStage(project);
-  const evs = evaluateProjectWallets(project, wallets);
   const wallet = wallets.find((w) => w.id === walletId);
   const minted = project.minted;
   const supply = project.supply;

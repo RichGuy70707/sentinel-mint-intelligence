@@ -5,6 +5,7 @@ import { evaluateProjectWallets, pickRelevantStage } from "@/eligibility/engine"
 import { formatEth, formatInt } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { currentStage } from "@/stages/engine";
+import { useHints } from "@/state/hints";
 import { useWallets } from "@/state/wallets";
 
 export function ProjectRow({
@@ -17,8 +18,9 @@ export function ProjectRow({
   onSelect?: () => void;
 }) {
   const wallets = useWallets((s) => s.wallets);
+  const hintMap = useHints((s) => s.byProject[project.id] ?? {});
   const stage = currentStage(project) ?? pickRelevantStage(project);
-  const rows = evaluateProjectWallets(project, wallets);
+  const rows = evaluateProjectWallets(project, wallets, hintMap);
   return (
     <button
       type="button"

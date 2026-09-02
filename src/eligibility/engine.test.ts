@@ -53,6 +53,17 @@ describe("eligibility", () => {
     assert.equal(no.status, "NOT_ELIGIBLE");
   });
 
+  it("marks public wallets over maxPerWallet as not eligible", () => {
+    const r = evaluateWalletStage(wallet, project, stage({ maxPerWallet: 1 }), { nftBalance: 1 });
+    assert.equal(r.status, "NOT_ELIGIBLE");
+    assert.match(r.reason, /cap/);
+  });
+
+  it("does not invent merkle proofs for WL / presale labels", () => {
+    const r = evaluateWalletStage(wallet, project, stage({ kind: "WL", mechanism: "WL" }));
+    assert.equal(r.status, "REQUIRES_PROOF");
+  });
+
   it("isolates cache keys by wallet and chain", () => {
     const a = isolateCacheKey(1, "p", "0x1111111111111111111111111111111111111111", "s");
     const b = isolateCacheKey(4663, "p", "0x1111111111111111111111111111111111111111", "s");

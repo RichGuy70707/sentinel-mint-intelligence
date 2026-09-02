@@ -10,6 +10,7 @@ import { buildMintTransaction } from "@/transactions/builder";
 import { simulateTransaction } from "@/simulation/engine";
 import { CHAINS } from "@/chains/registry";
 import { providerAvailability } from "@/providers/secrets";
+import { readWalletHints } from "@/providers/wallet-hints";
 
 const chainKey = z.enum(["eth", "rh", "ink", "base"]);
 
@@ -58,6 +59,16 @@ export const readBalanceFn = createServerFn({ method: "POST" })
     const wei = await ethGetBalance(data.chainKey, data.address);
     return { wei: wei.toString() };
   });
+
+export const walletHintsFn = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      chainKey,
+      contract: z.string(),
+      wallets: z.array(z.string()).max(20),
+    }),
+  )
+  .handler(async ({ data }) => readWalletHints(data.chainKey, data.contract, data.wallets));
 
 export const prepareMintFn = createServerFn({ method: "POST" })
   .validator(

@@ -6,9 +6,10 @@ function env(name: string): string | undefined {
 }
 
 export function alchemyKey(chain: ChainKey): string | undefined {
+  const shared = env("ALCHEMY_API_KEY") ?? env("ALCHEMY_ETH_API_KEY");
   if (chain === "eth") return env("ALCHEMY_ETH_API_KEY") ?? env("ALCHEMY_API_KEY");
-  if (chain === "base") return env("ALCHEMY_BASE_API_KEY") ?? env("ALCHEMY_API_KEY");
-  if (chain === "ink") return env("ALCHEMY_INK_API_KEY");
+  if (chain === "base") return env("ALCHEMY_BASE_API_KEY") ?? shared;
+  if (chain === "ink") return env("ALCHEMY_INK_API_KEY") ?? shared;
   if (chain === "rh") return env("ALCHEMY_RH_API_KEY");
   return undefined;
 }

@@ -63,6 +63,9 @@ export function evaluateWalletStage(
       };
     case "MERKLE":
     case "ALLOWLIST":
+    case "PRESALE":
+    case "WL":
+    case "GUARANTEED":
       return {
         ...base,
         status: "REQUIRES_PROOF",
@@ -128,12 +131,24 @@ export function evaluateWalletStage(
     case "SEADROP":
     case "FREE":
     case "PAID":
+    case "DUTCH_AUCTION": {
+      if (stage.maxPerWallet != null && hints.nftBalance != null && hints.nftBalance >= stage.maxPerWallet) {
+        return {
+          ...base,
+          status: "NOT_ELIGIBLE",
+          reason: `Already holds ${hints.nftBalance} (cap ${stage.maxPerWallet})`,
+          confidence: "HIGH",
+          evidence: "ON_CHAIN",
+        };
+      }
+      const held = hints.nftBalance != null ? `; holds ${hints.nftBalance} already` : "";
       return {
         ...base,
         status: "ELIGIBLE",
-        reason: `${stage.kind} stage does not require a private proof`,
+        reason: `${stage.kind} stage does not require a private proof${held}`,
         confidence: stage.mechanismConfidence === "VERIFIED" ? "HIGH" : "MEDIUM",
       };
+    }
     default:
       return {
         ...base,

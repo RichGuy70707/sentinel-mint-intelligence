@@ -8,6 +8,7 @@ import { evaluateProjectWallets } from "@/eligibility/engine";
 import { formatInt } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { useCatalog } from "@/state/catalog";
+import { useHints } from "@/state/hints";
 import { useWallets } from "@/state/wallets";
 
 export type BoardMode = "home" | "upcoming" | "trending" | "new" | "runners";
@@ -26,6 +27,7 @@ export function DiscoveryBoard({ mode }: { mode: BoardMode }) {
   const signals = useCatalog((s) => s.signals);
   const scannedAt = useCatalog((s) => s.scannedAt);
   const wallets = useWallets((s) => s.wallets);
+  const hintStore = useHints((s) => s.byProject);
 
   const { eligibleIds, readyIds, requiresIds, unknownIds } = useMemo(() => {
     const eligibleIds = new Set<string>();
@@ -33,14 +35,14 @@ export function DiscoveryBoard({ mode }: { mode: BoardMode }) {
     const requiresIds = new Set<string>();
     const unknownIds = new Set<string>();
     for (const p of projects) {
-      const rows = evaluateProjectWallets(p, wallets);
+      const rows = evaluateProjectWallets(p, wallets, hintStore[p.id] ?? {});
       if (rows.some((r) => r.status === "ELIGIBLE")) eligibleIds.add(p.id);
       if (rows.some((r) => r.status === "ELIGIBLE" && !r.requiresVerification)) readyIds.add(p.id);
       if (rows.some((r) => r.status === "REQUIRES_PROOF" || r.status === "REQUIRES_VERIFICATION")) requiresIds.add(p.id);
       if (rows.some((r) => r.status === "UNKNOWN")) unknownIds.add(p.id);
     }
     return { eligibleIds, readyIds, requiresIds, unknownIds };
-  }, [projects, wallets]);
+  }, [projects, wallets, hintStore]);
 
   const filtered = useMemo(
     () =>

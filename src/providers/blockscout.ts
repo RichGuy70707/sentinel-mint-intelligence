@@ -1,10 +1,10 @@
 import type { ChainKey } from "@/core/types";
 
-export const BLOCKSCOUT_HOST: Record<ChainKey, string> = {
-  eth: "https://eth.blockscout.com",
-  base: "https://base.blockscout.com",
-  ink: "https://explorer.inkonchain.com",
-  rh: "https://robinhoodchain.blockscout.com",
+export const BLOCKSCOUT_HOSTS: Record<ChainKey, string[]> = {
+  eth: ["https://eth.blockscout.com"],
+  base: ["https://base.blockscout.com", "https://explorer.base.org"],
+  ink: ["https://explorer.inkonchain.com"],
+  rh: ["https://robinhoodchain.blockscout.com"],
 };
 
 export interface BlockscoutTransfer {
@@ -39,24 +39,27 @@ export function tokenAddress(item: BlockscoutTransfer): string | null {
 
 export async function blockscoutMintTransfers(
   chainKey: ChainKey,
-): Promise<{ items: BlockscoutTransfer[]; used: boolean; error?: string }> {
-  const host = BLOCKSCOUT_HOST[chainKey];
-  const types = ["ERC-721", "ERC-1155"];
-  try {
-    const pages = await Promise.all(
-      types.map(async (type) => {
-        const res = await fetch(`${host}/api/v2/token-transfers?type=${encodeURIComponent(type)}`, {
-          headers: { accept: "application/json" },
-          signal: AbortSignal.timeout(8_000),
-        });
-        if (!res.ok) throw new Error(`Blockscout HTTP ${res.status}`);
-        const body = (await res.json()) as { items?: BlockscoutTransfer[] };
-        return body.items ?? [];
-      }),
-    );
-    const items = pages.flat().filter(isMintTransfer);
-    return { items, used: true };
-  } catch (err) {
-    return { items: [], used: true, error: err instanceof Error ? err.message : String(err) };
+): Promise<{ items: BlockscoutTransfer[]; used: boolean; error?: string; host?: string }> {
+  const hosts = BLOCKSCOUT_HOSTS[chainKey] ?? [];
+  let lastError: string | undefined;
+  for (const host of hosts) {
+    try {
+      const pages = await Promise.all(
+        ["ERC-721", "ERC-1155"].map(async (type) => {
+          const res = await fetch(`${host}/api/v2/token-transfers?type=${encodeURIComponent(type)}`, {
+            headers: { accept: "application/json" },
+            signal: AbortSignal.timeout(6_000),
+          });
+          if (!res.ok) throw new Error(`Blockscout HTTP ${res.status}`);
+          const body = (await res.json()) as { items?: BlockscoutTransfer[] };
+          return body.items ?? [];
+        }),
+      );
+      const items = pages.flat().filter(isMintTransfer);
+      return { items, used: true, host };
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+    }
   }
+  return { items: [], used: true, error: lastError };
 }

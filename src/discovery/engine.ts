@@ -1,5 +1,4 @@
 import { normalizeAddress, shortAddress } from "@/core/address";
-import { classifyMintStatus } from "@/core/time";
 import type { ChainKey, ProjectModel, Provenance } from "@/core/types";
 import { CHAINS, TRANSFER_TOPIC, ZERO_TOPIC } from "@/chains/registry";
 import { inspectContract } from "@/contracts/inspect";
@@ -8,7 +7,9 @@ import { alchemyContractMeta, alchemyMintTransfers } from "@/providers/alchemy";
 import { blockscoutMintTransfers, tokenAddress, type BlockscoutTransfer } from "@/providers/blockscout";
 import { openSeaMarket } from "@/providers/opensea";
 import { ethBlockNumber, ethGetLogs, type LogEntry } from "@/providers/rpc";
-import { deriveStagesFromIntel } from "@/stages/engine";
+import { intelCache } from "@/providers/ttl-cache";
+import { deriveStagesFromIntel, resolveMintStatus } from "@/stages/engine";
+import { isProtocolReceiptNft, receiptLabel } from "./noise";
 
 const SCAN_BLOCKS: Record<ChainKey, number> = {
   eth: 48,
@@ -60,9 +61,9 @@ export async function discoverMints(chains: ChainKey[] = ["eth", "rh", "ink", "b
 
         const fromLogs = aggregateLogs(chainKey, logPack.logs, scannedAt);
         const fromScout = aggregateBlockscout(chainKey, scout.items, scannedAt);
-        const merged = mergeProjects(fromLogs, fromScout);
+        const merged = mergeProjects(fromLogs, fromScout).filter((p) => !isProtocolReceiptNft(p));
         if (logPack.source !== "none") sources.push({ chainKey, source: logPack.source });
-        if (scout.items.length) sources.push({ chainKey, source: "blockscout" });
+        if (scout.items.length) sources.push({ chainKey, source: scout.host ? `blockscout:${scout.host}` : "blockscout" });
         if (scout.error && !scout.items.length && !fromLogs.length) {
           errors.push({ chainKey, message: scout.error });
         }
@@ -232,7 +233,7 @@ function projectFromAgg(agg: Agg, scannedAt: number, windowMin: number, note: st
   };
   const stages = deriveStagesFromIntel({
     projectId: `${agg.chainKey}:${agg.contract}`,
-    publicStart: scannedAt - 60_000,
+    publicStart: null,
     priceWei: null,
   });
   const minted = agg.mints;
@@ -261,7 +262,7 @@ function projectFromAgg(agg: Agg, scannedAt: number, windowMin: number, note: st
     bytecodePresent: null,
     contractType: null,
     interfaces: [],
-    riskFlags: ["Metadata pending inspect"],
+    riskFlags: receiptLabel(agg) ? [`Protocol receipt: ${receiptLabel(agg)}`] : ["Metadata pending inspect"],
     market: null,
     deployer: null,
     saleSource: null,
@@ -278,22 +279,24 @@ async function enrichTop(chainKey: ChainKey, projects: ProjectModel[], limit: nu
 
 async function enrichProject(p: ProjectModel): Promise<ProjectModel> {
   if (!p.contract) return p;
+  const contract = p.contract;
   try {
     const [intel, sale, alchemy, market] = await Promise.all([
-      inspectContract(p.chainKey, p.contract),
-      probeSale(p.chainKey, p.contract),
-      alchemyContractMeta(p.chainKey, p.contract),
-      openSeaMarket(p.chainKey, p.contract),
+      inspectContract(p.chainKey, contract),
+      intelCache.wrap(`sale:${p.chainKey}:${contract}`, 30_000, () => probeSale(p.chainKey, contract)),
+      alchemyContractMeta(p.chainKey, contract),
+      intelCache.wrap(`os:${p.chainKey}:${contract}`, 60_000, () => openSeaMarket(p.chainKey, contract)),
     ]);
     const priceWei = sale.priceWei ?? p.priceWei;
     const stages = deriveStagesFromIntel({
       projectId: p.id,
-      publicStart: sale.startTime ?? p.stages[0]?.startTime ?? p.detectedAt,
+      publicStart: sale.startTime ?? null,
       publicEnd: sale.endTime ?? null,
       priceWei,
       maxPerWallet: sale.maxPerWallet,
       maxSupply: intel.maxSupply ? Number(intel.maxSupply) : p.supply,
       seadrop: sale.seadrop,
+      merkleRoot: sale.merkleRoot,
     });
     const minted = intel.totalSupply ? Number(intel.totalSupply) : p.minted;
     const supply = intel.maxSupply ? Number(intel.maxSupply) : p.supply;
@@ -310,7 +313,7 @@ async function enrichProject(p: ProjectModel): Promise<ProjectModel> {
       interfaces: intel.interfaces,
       verifiedSource: intel.interfaces.includes("ERC721") || intel.interfaces.includes("ERC1155"),
       stages,
-      status: classifyMintStatus(stages),
+      status: resolveMintStatus(stages, { minted }),
       deployer: sale.owner,
       saleSource: sale.source === "none" ? null : sale.source,
       market,
@@ -318,6 +321,7 @@ async function enrichProject(p: ProjectModel): Promise<ProjectModel> {
         ...(intel.bytecodePresent ? [] : ["No bytecode"]),
         ...(priceWei == null ? ["Mint price not exposed as a standard view"] : []),
         ...(sale.seadrop ? [] : ["Mechanism derived from live mint logs"]),
+        ...(sale.merkleRoot ? ["Non-zero merkle root — allowlist proof unavailable"] : []),
         ...(market ? [] : ["OpenSea market unread — key missing or collection unindexed"]),
       ],
       description: `${intel.name || alchemy.name || p.name} on ${CHAINS[p.chainKey].name}. ${sale.source !== "none" ? `Price source: ${sale.source}.` : "Price not readable on-chain."}`,
