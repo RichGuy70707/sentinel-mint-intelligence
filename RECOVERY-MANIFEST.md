@@ -105,3 +105,10 @@
 - Verified ABI preferred; mint(address,uint256) and adminMint stay non-executable
 - Prepare refuses ended windows and merkle-only drops without a public price
 - SeaDrop remains the only protocol mint path besides allowlisted selectors
+
+## Execution hardening (2026-09-02)
+
+- eth_call simulates the same value that would be broadcast
+- Upcoming and ended sale windows cannot prepare
+- Injected account must match the named wallet
+- Missing receipts stay PENDING, never CONFIRMED
