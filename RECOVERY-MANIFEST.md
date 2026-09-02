@@ -67,3 +67,10 @@
 - Protocol receipts / non-721/1155 dropped after enrich
 - Receipt tracker mounted in the shell; queue stores chainKey
 - Eligibility hint maps used on Opportunities, project detail, wallet detail, Projects filters
+
+## Provider health semantics (2026-09-02)
+
+- Health probes use eth_chainId + eth_blockNumber, not contract eth_call
+- Application "execution reverted" does not fail a provider or trigger failover
+- HTTP 403/401/429 become ACCESS_DENIED / AUTH_FAILED / RATE_LIMITED and skip the slot
+- Public RPC remains fallback; header DEGRADED only when a chain has no projects and an error
