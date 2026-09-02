@@ -5,7 +5,7 @@ import { discoverMints, inspectAsProject } from "@/discovery/engine";
 import { fetchMintGoPublic } from "@/discovery/mintgo";
 import { openSeaPoolSnapshot } from "@/providers/opensea";
 import { getPool } from "@/providers/pool";
-import { ethBlockNumber, ethChainId, ethGasPrice, ethGetBalance } from "@/providers/rpc";
+import { ethBlockNumber, ethChainId, ethGasPrice, ethGetBalance, ethGetTransactionReceipt } from "@/providers/rpc";
 import { inspectContract } from "@/contracts/inspect";
 import { prepareMintFromEvidence } from "@/transactions/prepare";
 import { simulateTransaction } from "@/simulation/engine";
@@ -111,6 +111,23 @@ export const simulateMintFn = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => simulateTransaction(data.chainKey as ChainKey, data.tx));
+
+export const receiptFn = createServerFn({ method: "POST" })
+  .validator(z.object({ chainKey, hash: z.string() }))
+  .handler(async ({ data }) => {
+    try {
+      const rec = await ethGetTransactionReceipt(data.chainKey, data.hash);
+      if (!rec) return { kind: "PENDING" as const };
+      if (rec.status === "0x1") return { kind: "CONFIRMED" as const, blockNumber: rec.blockNumber };
+      if (rec.status === "0x0") return { kind: "REVERTED" as const, blockNumber: rec.blockNumber };
+      return { kind: "PENDING" as const };
+    } catch (err) {
+      return {
+        kind: "PROVIDER_ERROR" as const,
+        reason: err instanceof Error ? err.message : "receipt lookup failed",
+      };
+    }
+  });
 
 export const systemHealthFn = createServerFn({ method: "GET" }).handler(async () => {
   const providers = getPool().snapshot();

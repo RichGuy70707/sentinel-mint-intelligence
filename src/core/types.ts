@@ -249,8 +249,10 @@ export interface QueueItem {
     | "REJECTED"
     | "SIGN_FAILED"
     | "SUBMITTED"
+    | "PENDING"
     | "BROADCAST"
     | "CONFIRMED"
+    | "REVERTED"
     | "FAILED"
     | "CANCELLED";
   txHash: string | null;

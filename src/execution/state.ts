@@ -10,8 +10,10 @@ export type ExecutionStatus =
   | "REJECTED"
   | "SIGN_FAILED"
   | "SUBMITTED"
+  | "PENDING"
   | "BROADCAST"
   | "CONFIRMED"
+  | "REVERTED"
   | "FAILED"
   | "CANCELLED";
 
@@ -20,7 +22,9 @@ export type AuthorizeEvent =
   | { type: "USER_REJECTED" }
   | { type: "SIGN_FAILED"; message?: string }
   | { type: "SIGNED_AND_BROADCAST"; txHash: string }
+  | { type: "RECEIPT_PENDING" }
   | { type: "RECEIPT_CONFIRMED" }
+  | { type: "RECEIPT_REVERTED" }
   | { type: "RECEIPT_FAILED" };
 
 export function applyAuthorizeEvent(current: ExecutionStatus, event: AuthorizeEvent): ExecutionStatus {
@@ -34,8 +38,12 @@ export function applyAuthorizeEvent(current: ExecutionStatus, event: AuthorizeEv
       return "SIGN_FAILED";
     case "SIGNED_AND_BROADCAST":
       return "SUBMITTED";
+    case "RECEIPT_PENDING":
+      return current === "SUBMITTED" || current === "BROADCAST" ? "PENDING" : current;
     case "RECEIPT_CONFIRMED":
-      return current === "SUBMITTED" ? "CONFIRMED" : current;
+      return current === "SUBMITTED" || current === "PENDING" || current === "BROADCAST" ? "CONFIRMED" : current;
+    case "RECEIPT_REVERTED":
+      return current === "SUBMITTED" || current === "PENDING" || current === "BROADCAST" ? "REVERTED" : current;
     case "RECEIPT_FAILED":
       return "FAILED";
     default:

@@ -77,6 +77,20 @@ export async function ethGetLogs(
   return rpcCall<LogEntry[]>(chainKey, "eth_getLogs", [filter]);
 }
 
+export async function ethGetTransactionReceipt(
+  chainKey: ChainKey,
+  hash: string,
+): Promise<{ status: "0x0" | "0x1" | null; blockNumber: string | null } | null> {
+  const rec = await rpcCall<{ status?: string; blockNumber?: string } | null>(
+    chainKey,
+    "eth_getTransactionReceipt",
+    [hash],
+  );
+  if (!rec) return null;
+  const status = rec.status === "0x1" || rec.status === "0x0" ? rec.status : null;
+  return { status, blockNumber: rec.blockNumber ?? null };
+}
+
 function stable(value: unknown): string {
   return JSON.stringify(value);
 }

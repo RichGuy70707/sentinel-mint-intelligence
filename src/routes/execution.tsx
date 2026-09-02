@@ -5,6 +5,7 @@ import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/primitives";
 import { CHAINS } from "@/chains/registry";
 import { applyAuthorizeEvent, canAuthorize, isUserRejection } from "@/execution/state";
+import { useReceiptTracker } from "@/hooks/use-receipts";
 import { useCatalog } from "@/state/catalog";
 import { useQueue } from "@/state/queue";
 import { useWallets } from "@/state/wallets";
@@ -18,6 +19,7 @@ function ExecutionPage() {
   const projects = useCatalog((s) => s.projects);
   const wallets = useWallets((s) => s.wallets);
   const [msg, setMsg] = useState<string | null>(null);
+  useReceiptTracker();
 
   async function authorize(id: string) {
     const item = useQueue.getState().items.find((i) => i.id === id);

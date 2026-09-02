@@ -17,8 +17,9 @@ describe("execution authorization state", () => {
   it("marks sign failure and successful submit", () => {
     assert.equal(applyAuthorizeEvent("READY", { type: "SIGN_FAILED" }), "SIGN_FAILED");
     assert.equal(applyAuthorizeEvent("READY", { type: "SIGNED_AND_BROADCAST", txHash: "0xabc" }), "SUBMITTED");
-    assert.equal(applyAuthorizeEvent("SUBMITTED", { type: "RECEIPT_CONFIRMED" }), "CONFIRMED");
-    assert.equal(applyAuthorizeEvent("SUBMITTED", { type: "RECEIPT_FAILED" }), "FAILED");
+    assert.equal(applyAuthorizeEvent("SUBMITTED", { type: "RECEIPT_PENDING" }), "PENDING");
+    assert.equal(applyAuthorizeEvent("PENDING", { type: "RECEIPT_CONFIRMED" }), "CONFIRMED");
+    assert.equal(applyAuthorizeEvent("PENDING", { type: "RECEIPT_REVERTED" }), "REVERTED");
   });
 
   it("only allows authorize from prepared/simulated/ready", () => {
