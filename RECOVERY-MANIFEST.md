@@ -44,3 +44,11 @@
 - Simulation distinguishes revert vs provider error
 - NFT-gated without a gate contract is REQUIRES_VERIFICATION
 - Eligibility hints prefetch for top scanned projects
+
+## Provider key pool (2026-09-02)
+
+- Consumes OPENSEA_API_KEY{,_2,_3} and ALCHEMY_API_KEY{,_2,_3} from server env only
+- Alchemy slots register separately on eth/base/ink; public RPC remains fallback
+- OpenSea uses a credential pool with failover on 401/403/429/5xx
+- Snapshots redact key pathnames; slots start RECOVERING until a request succeeds
+- RH Alchemy still requires ALCHEMY_RH_API_KEY (not invented from the shared keys)
