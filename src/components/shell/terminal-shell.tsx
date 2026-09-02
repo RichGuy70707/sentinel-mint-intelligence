@@ -4,12 +4,13 @@ import { useEffect, useMemo, useState, type PropsWithChildren } from "react";
 import { Input } from "@/components/ui/primitives";
 import type { ChainKey } from "@/core/types";
 import { isHexAddress, normalizeAddress } from "@/core/address";
+import type { TerminalPhase } from "@/core/terminal";
 import { applyFilters, DEFAULT_FILTERS } from "@/core/filters";
 import { useScanner } from "@/hooks/use-scanner";
 import { cn } from "@/lib/cn";
 import { inspectProjectFn } from "@/server/functions";
 import { useAlerts } from "@/state/alerts";
-import { useCatalog } from "@/state/catalog";
+import { catalogPhase, useCatalog } from "@/state/catalog";
 import { useWallets } from "@/state/wallets";
 
 const PRIMARY = [
@@ -42,6 +43,8 @@ export function TerminalShell({ children }: PropsWithChildren) {
   const setQuery = useCatalog((s) => s.setQuery);
   const chainFilter = useCatalog((s) => s.chainFilter);
   const projects = useCatalog((s) => s.projects);
+  const sessionFresh = useCatalog((s) => s.sessionFresh);
+  const scanFailed = useCatalog((s) => s.scanFailed);
   const select = useCatalog((s) => s.select);
   const upsert = useCatalog((s) => s.upsert);
   const gasGwei = useCatalog((s) => s.gasGwei);
@@ -65,6 +68,7 @@ export function TerminalShell({ children }: PropsWithChildren) {
   );
 
   const chainMs = useMemo(() => latencyByChain(health?.providers ?? [], errors), [health, errors]);
+  const phase = catalogPhase({ scanning, sessionFresh, scanFailed, projects, errors });
 
   async function submitSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -119,9 +123,9 @@ export function TerminalShell({ children }: PropsWithChildren) {
           </button>
           <Link to="/" className="flex items-center gap-1.5 pr-1">
             <span className="text-[13px] font-medium tracking-[0.22em]">SENTINEL</span>
-            <span className={cn("size-1.5 rounded-full", scanning || projects.length ? "bg-live" : "bg-subtle")} />
-            <span className={cn("hidden text-[10px] sm:inline", scanning ? "text-live" : "text-subtle")}>
-              {scanning ? "LIVE" : projects.length ? "LIVE" : "IDLE"}
+            <span className={cn("size-1.5 rounded-full", phaseDot(phase))} />
+            <span className={cn("hidden text-[10px] uppercase tracking-[0.12em] sm:inline", phaseTone(phase))}>
+              {phase}
             </span>
           </Link>
           <nav className="hidden items-center gap-0.5 md:flex">
@@ -193,7 +197,7 @@ export function TerminalShell({ children }: PropsWithChildren) {
             const row = chainMs[key];
             return (
               <span key={key} className={row?.ok ? "text-muted" : "text-warn"}>
-                {key.toUpperCase()} {row?.ms != null ? `${row.ms}ms` : row?.ok === false ? "degraded" : "—"}
+                {key.toUpperCase()} {row?.ms != null ? `${row.ms}ms` : row?.ok === false ? "DEGRADED" : "—"}
               </span>
             );
           })}
@@ -212,6 +216,20 @@ export function TerminalShell({ children }: PropsWithChildren) {
       <main className="min-h-[calc(100vh-40px)]">{children}</main>
     </div>
   );
+}
+
+function phaseDot(phase: TerminalPhase): string {
+  if (phase === "LIVE" || phase === "SCANNING") return "bg-live";
+  if (phase === "DEGRADED") return "bg-warn";
+  if (phase === "ERROR") return "bg-danger";
+  return "bg-subtle";
+}
+
+function phaseTone(phase: TerminalPhase): string {
+  if (phase === "LIVE" || phase === "SCANNING") return "text-live";
+  if (phase === "DEGRADED") return "text-warn";
+  if (phase === "ERROR") return "text-danger";
+  return "text-subtle";
 }
 
 function latencyByChain(

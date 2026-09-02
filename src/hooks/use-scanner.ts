@@ -1,44 +1,39 @@
 import { useCallback, useRef } from "react";
+import { SCAN_CLIENT_BUDGET_MS } from "@/core/terminal";
 import { scanLiveMints, systemHealthFn } from "@/server/functions";
 import { useAlerts } from "@/state/alerts";
 import { useCatalog } from "@/state/catalog";
-import { useWatchlist } from "@/state/watchlist";
 
 export function useScanner() {
-  const setScan = useCatalog((s) => s.setScan);
-  const setScanning = useCatalog((s) => s.setScanning);
-  const setHealth = useCatalog((s) => s.setHealth);
-  const setGasGwei = useCatalog((s) => s.setGasGwei);
-  const mergeLive = useWatchlist((s) => s.mergeLive);
-  const push = useAlerts((s) => s.push);
   const inflight = useRef<Promise<void> | null>(null);
 
   return useCallback(async () => {
     if (inflight.current) return inflight.current;
-    setScanning(true);
+    const catalog = useCatalog.getState();
+    catalog.setScanning(true);
     const run = (async () => {
       try {
-        const report = await scanLiveMints();
-        const merged = mergeLive(report.projects);
-        setScan({
-          projects: merged,
+        const report = await withTimeout(scanLiveMints(), SCAN_CLIENT_BUDGET_MS);
+        useCatalog.getState().setScan({
+          projects: report.projects,
           scannedAt: report.scannedAt,
           errors: report.errors,
           mintgoNote: report.mintgo.reason,
         });
-        setGasGwei(report.gasGwei ?? null);
-        if (report.errors.length) {
-          push("PROVIDER_FAILURE", "Scan incomplete", report.errors.map((e) => `${e.chainKey}: ${e.message}`).join(" · "));
-        }
-        const hot = merged.filter((p) => (p.mintVelocityPerMin ?? 0) >= 2);
+        useCatalog.getState().setGasGwei(report.gasGwei ?? null);
+        const live = report.projects.filter((p) => p.status === "LIVE");
+        if (live.length) useAlerts.getState().push("MINT_LIVE", "Live mints", `${live.length} collection(s) currently minting.`);
+        const hot = report.projects.filter((p) => (p.mintVelocityPerMin ?? 0) >= 2);
         if (hot.length) {
-          push("ACTIVITY_SPIKE", "Mint velocity", `${hot.length} collection(s) showing elevated mint Transfer activity.`);
+          useAlerts.getState().push(
+            "ACTIVITY_SPIKE",
+            "Mint velocity",
+            `${hot.length} collection(s) showing elevated mint Transfer activity.`,
+          );
         }
-        const live = merged.filter((p) => p.status === "LIVE");
-        if (live.length) push("MINT_LIVE", "Live mints", `${live.length} collection(s) currently minting.`);
         void systemHealthFn()
           .then((health) => {
-            setHealth({
+            useCatalog.getState().setHealth({
               scannedAt: health.scannedAt,
               providers: health.providers,
               discoveryOk: health.discoveryOk,
@@ -46,12 +41,36 @@ export function useScanner() {
             });
           })
           .catch(() => undefined);
+      } catch {
+        const cur = useCatalog.getState();
+        cur.setScan({
+          projects: cur.projects,
+          scannedAt: cur.scannedAt ?? Date.now(),
+          errors: cur.errors,
+          failed: true,
+        });
       } finally {
-        setScanning(false);
+        useCatalog.getState().setScanning(false);
         inflight.current = null;
       }
     })();
     inflight.current = run;
     return run;
-  }, [mergeLive, push, setGasGwei, setHealth, setScan, setScanning]);
+  }, []);
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error("SCAN_TIMEOUT")), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
 }

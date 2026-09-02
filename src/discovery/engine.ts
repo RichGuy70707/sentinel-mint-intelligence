@@ -45,41 +45,69 @@ export async function discoverMints(chains: ChainKey[] = ["eth", "rh", "ink", "b
 
   await Promise.all(
     chains.map(async (chainKey) => {
-      try {
-        const latest = await withBudget(ethBlockNumber(chainKey), 4_000, null);
-        if (latest != null) scannedBlocks.push({ chainKey, from: Math.max(0, latest - SCAN_BLOCKS[chainKey]), to: latest });
-
-        const scout = await blockscoutMintTransfers(chainKey);
-        let logPack: { logs: LogEntry[]; source: string } = { logs: [], source: "none" };
-        if (!scout.items.length && latest != null) {
-          logPack = await withBudget(
-            collectLogs(chainKey, Math.max(0, latest - SCAN_BLOCKS[chainKey]), latest),
-            8_000,
-            { logs: [], source: "none" },
-          );
-        }
-
-        const fromLogs = aggregateLogs(chainKey, logPack.logs, scannedAt);
-        const fromScout = aggregateBlockscout(chainKey, scout.items, scannedAt);
-        const merged = mergeProjects(fromLogs, fromScout).filter((p) => !isProtocolReceiptNft(p));
-        if (logPack.source !== "none") sources.push({ chainKey, source: logPack.source });
-        if (scout.items.length) sources.push({ chainKey, source: scout.host ? `blockscout:${scout.host}` : "blockscout" });
-        if (scout.error && !scout.items.length && !fromLogs.length) {
-          errors.push({ chainKey, message: scout.error });
-        }
-        const enriched = await withBudget(enrichTop(chainKey, merged, 6), 10_000, merged.slice(0, 8));
-        groups.push(...enriched);
-      } catch (err) {
-        errors.push({
-          chainKey,
-          message: err instanceof Error ? err.message : String(err),
-        });
-      }
+      const slice = await withBudget(scanChain(chainKey, scannedAt), 12_000, {
+        projects: [] as ProjectModel[],
+        errors: [] as DiscoveryReport["errors"],
+        scannedBlocks: [] as DiscoveryReport["scannedBlocks"],
+        sources: [] as DiscoveryReport["sources"],
+        timedOut: true,
+      });
+      groups.push(...slice.projects);
+      scannedBlocks.push(...slice.scannedBlocks);
+      sources.push(...slice.sources);
+      if (slice.errors.length) errors.push(...slice.errors);
+      else if (slice.timedOut) errors.push({ chainKey, message: "chain budget exceeded" });
     }),
   );
 
   groups.sort((a, b) => (b.mintVelocityPerMin ?? 0) - (a.mintVelocityPerMin ?? 0));
   return { projects: groups, scannedAt, errors, scannedBlocks, sources };
+}
+
+async function scanChain(
+  chainKey: ChainKey,
+  scannedAt: number,
+): Promise<{
+  projects: ProjectModel[];
+  errors: DiscoveryReport["errors"];
+  scannedBlocks: DiscoveryReport["scannedBlocks"];
+  sources: DiscoveryReport["sources"];
+  timedOut: boolean;
+}> {
+  const errors: DiscoveryReport["errors"] = [];
+  const scannedBlocks: DiscoveryReport["scannedBlocks"] = [];
+  const sources: DiscoveryReport["sources"] = [];
+  try {
+    const latest = await withBudget(ethBlockNumber(chainKey), 4_000, null);
+    if (latest != null) scannedBlocks.push({ chainKey, from: Math.max(0, latest - SCAN_BLOCKS[chainKey]), to: latest });
+
+    const scout = await blockscoutMintTransfers(chainKey);
+    let logPack: { logs: LogEntry[]; source: string } = { logs: [], source: "none" };
+    if (!scout.items.length && latest != null) {
+      logPack = await withBudget(
+        collectLogs(chainKey, Math.max(0, latest - SCAN_BLOCKS[chainKey]), latest),
+        8_000,
+        { logs: [], source: "none" },
+      );
+    }
+
+    const fromLogs = aggregateLogs(chainKey, logPack.logs, scannedAt);
+    const fromScout = aggregateBlockscout(chainKey, scout.items, scannedAt);
+    const merged = mergeProjects(fromLogs, fromScout).filter((p) => !isProtocolReceiptNft(p));
+    if (logPack.source !== "none") sources.push({ chainKey, source: logPack.source });
+    if (scout.items.length) sources.push({ chainKey, source: scout.host ? `blockscout:${scout.host}` : "blockscout" });
+    if (scout.error && !scout.items.length && !fromLogs.length) {
+      errors.push({ chainKey, message: scout.error });
+    }
+    const enriched = await withBudget(enrichTop(chainKey, merged, 6), 10_000, merged.slice(0, 8));
+    return { projects: enriched, errors, scannedBlocks, sources, timedOut: false };
+  } catch (err) {
+    errors.push({
+      chainKey,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return { projects: [], errors, scannedBlocks, sources, timedOut: false };
+  }
 }
 
 async function collectLogs(

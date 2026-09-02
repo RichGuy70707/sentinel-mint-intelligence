@@ -8,6 +8,8 @@ import { currentStage } from "@/stages/engine";
 import { useHints } from "@/state/hints";
 import { useWallets } from "@/state/wallets";
 
+const EMPTY_HINTS = {};
+
 export function ProjectRow({
   project,
   selected,
@@ -18,7 +20,7 @@ export function ProjectRow({
   onSelect?: () => void;
 }) {
   const wallets = useWallets((s) => s.wallets);
-  const hintMap = useHints((s) => s.byProject[project.id] ?? {});
+  const hintMap = useHints((s) => s.byProject[project.id] ?? EMPTY_HINTS);
   const stage = currentStage(project) ?? pickRelevantStage(project);
   const rows = evaluateProjectWallets(project, wallets, hintMap);
   return (

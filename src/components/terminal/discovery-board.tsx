@@ -3,11 +3,12 @@ import { CompactFilters } from "@/components/terminal/compact-filters";
 import { ProjectPane } from "@/components/terminal/project-pane";
 import { ProjectRow } from "@/components/terminal/project-row";
 import { applyFilters, DEFAULT_FILTERS } from "@/core/filters";
+import { boardEmptyCopy, compactChainErrors } from "@/core/terminal";
 import type { ProjectModel } from "@/core/types";
 import { evaluateProjectWallets } from "@/eligibility/engine";
 import { formatInt } from "@/lib/format";
 import { cn } from "@/lib/cn";
-import { useCatalog } from "@/state/catalog";
+import { catalogPhase, useCatalog } from "@/state/catalog";
 import { useHints } from "@/state/hints";
 import { useWallets } from "@/state/wallets";
 
@@ -19,6 +20,8 @@ export function DiscoveryBoard({ mode }: { mode: BoardMode }) {
   const select = useCatalog((s) => s.select);
   const scanning = useCatalog((s) => s.scanning);
   const errors = useCatalog((s) => s.errors);
+  const sessionFresh = useCatalog((s) => s.sessionFresh);
+  const scanFailed = useCatalog((s) => s.scanFailed);
   const query = useCatalog((s) => s.query);
   const chainFilter = useCatalog((s) => s.chainFilter);
   const priceFilter = useCatalog((s) => s.priceFilter);
@@ -73,7 +76,8 @@ export function DiscoveryBoard({ mode }: { mode: BoardMode }) {
     .sort((a, b) => runnerScore(b) - runnerScore(a))
     .slice(0, 10);
   const mintPerSec = velocityPerSec(filtered);
-  const degraded = compactDegraded(errors);
+  const phase = catalogPhase({ scanning, sessionFresh, scanFailed, projects, errors });
+  const degraded = phase === "DEGRADED" || phase === "ERROR" ? compactChainErrors(errors) : null;
 
   return (
     <div className="grid min-h-[calc(100vh-40px)] lg:grid-cols-[272px_minmax(0,1fr)_248px]">
@@ -83,9 +87,7 @@ export function DiscoveryBoard({ mode }: { mode: BoardMode }) {
         <div className="min-h-0 flex-1 overflow-y-auto">
           {left.length === 0 ? (
             <p className="px-3 py-6 text-xs text-muted">
-              {scanning
-                ? "Reading mint Transfers…"
-                : "No mint activity in the current window. Search a contract to inspect it."}
+              {boardEmptyCopy(phase)}
             </p>
           ) : (
             left.map((p) => (
@@ -211,11 +213,6 @@ function formatMarket(wei: string | null | undefined): string {
   } catch {
     return "—";
   }
-}
-
-function compactDegraded(errors: { chainKey: string; message: string }[]): string | null {
-  if (!errors.length) return null;
-  return errors.map((e) => `${e.chainKey.toUpperCase()} degraded`).join(" · ");
 }
 
 function RailHeader({

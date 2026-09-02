@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { normalizeTimestamp } from "@/core/time";
+import { deriveTerminalPhase, DISCOVERY_CHAIN_COUNT, type TerminalPhase } from "@/core/terminal";
 import type { ChainKey, MintStatus, ProjectModel, StageKind, SystemHealth } from "@/core/types";
 import { resolveMintStatus } from "@/stages/engine";
 
@@ -10,6 +11,8 @@ interface CatalogState {
   projects: ProjectModel[];
   scannedAt: number | null;
   scanning: boolean;
+  sessionFresh: boolean;
+  scanFailed: boolean;
   errors: { chainKey: string; message: string }[];
   mintgoNote: string | null;
   health: SystemHealth | null;
@@ -26,6 +29,7 @@ interface CatalogState {
     scannedAt: number;
     errors: { chainKey: string; message: string }[];
     mintgoNote?: string;
+    failed?: boolean;
   }) => void;
   upsert: (project: ProjectModel) => void;
   setScanning: (v: boolean) => void;
@@ -89,12 +93,32 @@ function looksLikeAddress(name: string): boolean {
   return name.startsWith("0x") || name.includes("…");
 }
 
+export function catalogPhase(state: {
+  scanning: boolean;
+  sessionFresh: boolean;
+  scanFailed: boolean;
+  projects: ProjectModel[];
+  errors: { chainKey: string }[];
+}): TerminalPhase {
+  const liveCount = state.projects.filter((p) => p.status === "LIVE").length;
+  return deriveTerminalPhase({
+    scanning: state.scanning,
+    sessionFresh: state.sessionFresh,
+    scanFailed: state.scanFailed,
+    liveCount,
+    errorCount: state.errors.length,
+    chainCount: DISCOVERY_CHAIN_COUNT,
+  });
+}
+
 export const useCatalog = create<CatalogState>()(
   persist(
     (set, get) => ({
       projects: [],
       scannedAt: null,
       scanning: false,
+      sessionFresh: false,
+      scanFailed: false,
       errors: [],
       mintgoNote: null,
       health: null,
@@ -106,13 +130,26 @@ export const useCatalog = create<CatalogState>()(
       statusFilter: "ALL",
       signals: EMPTY_SIGNALS,
       gasGwei: null,
-      setScan: ({ projects, scannedAt, errors, mintgoNote }) => {
+      setScan: ({ projects, scannedAt, errors, mintgoNote, failed }) => {
+        if (failed) {
+          set({
+            scanFailed: true,
+            scanning: false,
+            scannedAt,
+            errors,
+            mintgoNote: mintgoNote ?? get().mintgoNote,
+          });
+          return;
+        }
         const next = dedupeProjects(projects);
         set({
           projects: next,
           scannedAt,
           errors,
           mintgoNote: mintgoNote ?? get().mintgoNote,
+          sessionFresh: true,
+          scanFailed: false,
+          scanning: false,
           selectedId:
             get().selectedId && next.some((p) => p.id === get().selectedId) ? get().selectedId : (next[0]?.id ?? null),
         });
@@ -122,7 +159,10 @@ export const useCatalog = create<CatalogState>()(
         const rest = get().projects.filter((p) => p.id !== cleaned.id);
         set({ projects: dedupeProjects([cleaned, ...rest]), selectedId: cleaned.id });
       },
-      setScanning: (scanning) => set({ scanning }),
+      setScanning: (scanning) => {
+        if (get().scanning === scanning) return;
+        set({ scanning });
+      },
       setHealth: (health) => set({ health }),
       select: (selectedId) => set({ selectedId }),
       setQuery: (query) => set({ query }),

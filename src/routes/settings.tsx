@@ -6,10 +6,12 @@ import { useCatalog } from "@/state/catalog";
 import { useQueue } from "@/state/queue";
 import { useWatchlist } from "@/state/watchlist";
 
+const EMPTY_NOTES: string[] = [];
+
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
 
 function SettingsPage() {
-  const notes = useCatalog((s) => s.health?.notes ?? []);
+  const notes = useCatalog((s) => s.health?.notes ?? EMPTY_NOTES);
   return (
     <Page>
       <PageHeader kicker="Preferences" title="Settings" />

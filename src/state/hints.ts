@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { hintsEqual } from "@/core/terminal";
 import type { OnChainHints } from "@/eligibility/engine";
 
 interface HintState {
@@ -6,8 +7,11 @@ interface HintState {
   setProjectHints: (projectId: string, hints: Record<string, OnChainHints>) => void;
 }
 
-export const useHints = create<HintState>((set) => ({
+export const useHints = create<HintState>((set, get) => ({
   byProject: {},
-  setProjectHints: (projectId, hints) =>
-    set((s) => ({ byProject: { ...s.byProject, [projectId]: hints } })),
+  setProjectHints: (projectId, hints) => {
+    const prev = get().byProject[projectId];
+    if (prev && hintsEqual(prev, hints)) return;
+    set({ byProject: { ...get().byProject, [projectId]: hints } });
+  },
 }));

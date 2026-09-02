@@ -5,6 +5,7 @@ import { Countdown } from "@/components/countdown";
 import { Button, Input } from "@/components/ui/primitives";
 import { shortAddress } from "@/core/address";
 import { formatWhen } from "@/core/time";
+import { nextHintMap } from "@/core/terminal";
 import type { ProjectModel } from "@/core/types";
 import { evaluateProjectWallets, pickRelevantStage, type OnChainHints } from "@/eligibility/engine";
 import { formatEth, formatInt } from "@/lib/format";
@@ -16,12 +17,13 @@ import { useHints } from "@/state/hints";
 import { useQueue } from "@/state/queue";
 import { useWallets } from "@/state/wallets";
 
+const EMPTY_HINTS: Record<string, OnChainHints> = {};
+
 export function ProjectPane({ project }: { project: ProjectModel | null }) {
   const wallets = useWallets((s) => s.wallets);
   const upsert = useCatalog((s) => s.upsert);
   const upsertQueue = useQueue((s) => s.upsert);
   const push = useAlerts((s) => s.push);
-  const setProjectHints = useHints((s) => s.setProjectHints);
   const storedHints = useHints((s) => (project ? s.byProject[project.id] : undefined));
   const [qty, setQty] = useState(1);
   const [walletId, setWalletId] = useState(wallets[0]?.id ?? "");
@@ -32,45 +34,51 @@ export function ProjectPane({ project }: { project: ProjectModel | null }) {
   const projectId = project?.id ?? "";
   const contract = project?.contract ?? "";
   const chainKey = project?.chainKey;
-  const walletKey = wallets.map((w) => `${w.id}:${w.address}`).join("|");
+  const walletKey = wallets.map((w) => `${w.id}:${w.address.toLowerCase()}`).join("|");
 
   useEffect(() => {
-    if (!projectId || !contract || !chainKey || wallets.length === 0) {
-      setHints({});
+    const clear = !projectId || !contract || !chainKey || walletKey.length === 0;
+    if (clear) {
+      setHints((prev) => nextHintMap(prev, {}, true));
       return;
     }
     let cancelled = false;
+    const snapshot = walletKey;
+    const pairs = snapshot.split("|").map((row) => {
+      const cut = row.indexOf(":");
+      return { id: row.slice(0, cut), address: row.slice(cut + 1) };
+    });
     walletHintsFn({
       data: {
         chainKey,
         contract,
-        wallets: wallets.map((w) => w.address),
+        wallets: pairs.map((p) => p.address),
       },
     })
       .then((rows) => {
         if (cancelled) return;
         const next: Record<string, OnChainHints> = {};
-        for (const w of wallets) {
-          const row = rows.find((r) => r.address.toLowerCase() === w.address.toLowerCase());
+        for (const pair of pairs) {
+          const row = rows.find((r) => r.address.toLowerCase() === pair.address);
           if (row) {
-            next[w.id] = {
+            next[pair.id] = {
               nftBalance: row.nftBalance ?? undefined,
               nativeBalanceWei: row.nativeBalanceWei ?? undefined,
             };
           }
         }
-        setHints(next);
-        setProjectHints(projectId, next);
+        setHints((prev) => nextHintMap(prev, next, false));
+        useHints.getState().setProjectHints(projectId, next);
       })
       .catch(() => {
-        if (!cancelled) setHints({});
+        if (!cancelled) setHints((prev) => nextHintMap(prev, {}, true));
       });
     return () => {
       cancelled = true;
     };
-  }, [projectId, contract, chainKey, walletKey, wallets, setProjectHints]);
+  }, [projectId, contract, chainKey, walletKey]);
 
-  const hintMap = Object.keys(hints).length ? hints : (storedHints ?? {});
+  const hintMap = Object.keys(hints).length ? hints : (storedHints ?? EMPTY_HINTS);
   const evs = useMemo(
     () => (project ? evaluateProjectWallets(project, wallets, hintMap) : []),
     [project, wallets, hintMap],
