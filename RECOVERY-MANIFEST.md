@@ -52,3 +52,10 @@
 - OpenSea uses a credential pool with failover on 401/403/429/5xx
 - Snapshots redact key pathnames; slots start RECOVERING until a request succeeds
 - RH Alchemy still requires ALCHEMY_RH_API_KEY (not invented from the shared keys)
+
+## Production readiness pass (2026-09-02)
+
+- Public mint encode only when SeaDrop is evidenced or a mint/publicMint/mintPublic selector is in bytecode
+- Unread price still refuses value 0
+- Submitted txs poll receipts: PENDING / CONFIRMED / REVERTED; provider errors stay pending
+- Baseline checkpoint 5f8af44 before this pass
