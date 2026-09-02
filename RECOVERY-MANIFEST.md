@@ -98,3 +98,10 @@
 - Missing names render as UNKNOWN PROJECT
 - OpenSea 404 is collection-not-found, not an API outage
 - ERC-1155 quantities above 10,000 in one log are treated as untrusted
+
+## Contract intelligence (2026-09-02)
+
+- Allowlisted mint signatures only: mint/publicMint/mintPublic(uint256)
+- Verified ABI preferred; mint(address,uint256) and adminMint stay non-executable
+- Prepare refuses ended windows and merkle-only drops without a public price
+- SeaDrop remains the only protocol mint path besides allowlisted selectors
