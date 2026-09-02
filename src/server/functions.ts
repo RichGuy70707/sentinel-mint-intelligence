@@ -130,7 +130,9 @@ export const receiptFn = createServerFn({ method: "POST" })
   });
 
 export const systemHealthFn = createServerFn({ method: "GET" }).handler(async () => {
-  const providers = getPool().snapshot();
+  const pool = getPool();
+  await pool.probeTransport();
+  const providers = pool.snapshot();
   const availability = providerAvailability();
   const probes = await Promise.all(
     (["eth", "rh", "ink", "base"] as ChainKey[]).map(async (key) => {

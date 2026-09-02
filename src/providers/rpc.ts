@@ -1,4 +1,5 @@
 import type { ChainKey } from "@/core/types";
+import { classifyHttpStatus, RpcError } from "./classify";
 import { getPool } from "./pool";
 
 interface JsonRpcResponse<T> {
@@ -17,9 +18,13 @@ export async function rpcCall<T>(chainKey: ChainKey, method: string, params: unk
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
     });
-    if (!res.ok) throw new Error(`RPC HTTP ${res.status} for ${method}`);
+    if (!res.ok) throw new RpcError(`RPC HTTP ${res.status} for ${method}`, classifyHttpStatus(res.status), res.status);
     const body = (await res.json()) as JsonRpcResponse<T>;
-    if (body.error) throw new Error(body.error.message);
+    if (body.error) {
+      const msg = body.error.message || `RPC error ${body.error.code}`;
+      const app = /execution reverted|revert(?:ed)?|out of gas|invalid opcode/i.test(msg);
+      throw new RpcError(msg, app ? "APPLICATION" : "UNKNOWN");
+    }
     if (body.result === undefined) throw new Error(`RPC empty result for ${method}`);
     return body.result;
   });

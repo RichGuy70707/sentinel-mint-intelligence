@@ -1,4 +1,6 @@
-import type { ChainKey, ProviderHealthState, ProviderSnapshot } from "@/core/types";
+import type { ChainKey, ProviderHealthState, ProviderSnapshot } from "../core/types.ts";
+import { CHAINS } from "../chains/registry.ts";
+import { classifyFailure, isTransportFailure, opensCircuitImmediately, RpcError, type TransportCause } from "./classify.ts";
 import { alchemyRpcEndpoints } from "./secrets.ts";
 import { sanitizeProviderText, sanitizeProviderUrl } from "./sanitize.ts";
 
@@ -17,10 +19,12 @@ interface InternalState {
   lastSuccessAt: number | null;
   lastLatencyMs: number | null;
   circuit: "CLOSED" | "OPEN" | "HALF_OPEN";
+  lastCause: TransportCause | null;
 }
 
 const OPEN_AFTER = 3;
 const OPEN_MS = 20_000;
+const DENIED_MS = 120_000;
 const DEGRADED_LATENCY = 1200;
 
 export class ProviderPool {
@@ -40,6 +44,7 @@ export class ProviderPool {
         lastSuccessAt: null,
         lastLatencyMs: null,
         circuit: "CLOSED",
+        lastCause: null,
       });
     }
   }
@@ -67,7 +72,8 @@ export class ProviderPool {
       .filter((c) => {
         const s = this.state.get(c.id)!;
         if (s.circuit === "OPEN") {
-          if (s.openedAt != null && now - s.openedAt >= OPEN_MS) {
+          const wait = s.lastCause && opensCircuitImmediately(s.lastCause) ? DENIED_MS : OPEN_MS;
+          if (s.openedAt != null && now - s.openedAt >= wait) {
             s.circuit = "HALF_OPEN";
             return true;
           }
@@ -107,6 +113,25 @@ export class ProviderPool {
     }
   }
 
+  async probeTransport(): Promise<void> {
+    await Promise.all(this.configs.map((c) => this.probeOne(c)));
+  }
+
+  private async probeOne(provider: ProviderConfig): Promise<void> {
+    const started = Date.now();
+    try {
+      const chainHex = await jsonRpc<string>(provider.url, "eth_chainId", []);
+      const chainId = Number.parseInt(chainHex, 16);
+      if (chainId !== CHAINS[provider.chainKey].id) {
+        throw new RpcError("chain id mismatch", "ACCESS_DENIED");
+      }
+      await jsonRpc<string>(provider.url, "eth_blockNumber", []);
+      this.recordSuccess(provider.id, Date.now() - started);
+    } catch (err) {
+      this.recordFailure(provider.id, err);
+    }
+  }
+
   private async executeWithFailover<T>(
     chainKey: ChainKey,
     exec: (url: string) => Promise<T>,
@@ -124,6 +149,11 @@ export class ProviderPool {
         return result;
       } catch (err) {
         lastError = err;
+        const cause = classifyFailure(err);
+        if (!isTransportFailure(cause)) {
+          this.recordSuccess(provider.id, Date.now() - started);
+          throw err;
+        }
         this.recordFailure(provider.id, err);
       }
     }
@@ -138,6 +168,7 @@ export class ProviderPool {
     s.lastLatencyMs = latencyMs;
     s.lastSuccessAt = Date.now();
     s.lastError = null;
+    s.lastCause = null;
     s.circuit = "CLOSED";
     s.openedAt = null;
   }
@@ -145,9 +176,11 @@ export class ProviderPool {
   private recordFailure(id: string, err: unknown) {
     const s = this.state.get(id);
     if (!s) return;
+    const cause = classifyFailure(err);
     s.failures += 1;
+    s.lastCause = cause;
     s.lastError = err instanceof Error ? err.message : String(err);
-    if (s.circuit === "HALF_OPEN" || s.failures >= OPEN_AFTER) {
+    if (s.circuit === "HALF_OPEN" || s.failures >= OPEN_AFTER || opensCircuitImmediately(cause)) {
       s.circuit = "OPEN";
       s.openedAt = Date.now();
     }
@@ -155,12 +188,33 @@ export class ProviderPool {
 }
 
 function classify(s: InternalState): ProviderHealthState {
+  if (s.lastCause === "ACCESS_DENIED") return "ACCESS_DENIED";
+  if (s.lastCause === "AUTH_FAILED") return "AUTH_FAILED";
+  if (s.lastCause === "RATE_LIMITED") return "RATE_LIMITED";
+  if (s.lastCause === "TIMEOUT" && s.circuit === "OPEN") return "TIMEOUT";
+  if (s.lastCause === "NETWORK_ERROR" && s.circuit === "OPEN") return "NETWORK_ERROR";
   if (s.circuit === "OPEN") return "OPEN";
   if (s.circuit === "HALF_OPEN") return "HALF_OPEN";
   if (s.failures > 0 && s.successes === 0) return "UNHEALTHY";
   if ((s.lastLatencyMs ?? 0) >= DEGRADED_LATENCY) return "DEGRADED";
   if (s.lastSuccessAt) return "HEALTHY";
   return "RECOVERING";
+}
+
+async function jsonRpc<T>(url: string, method: string, params: unknown[]): Promise<T> {
+  const res = await withTimeout(
+    fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    }),
+    6_000,
+  );
+  if (!res.ok) throw new Error(`RPC HTTP ${res.status} for ${method}`);
+  const body = (await res.json()) as { result?: T; error?: { message: string } };
+  if (body.error) throw new Error(body.error.message);
+  if (body.result === undefined) throw new Error(`RPC empty result for ${method}`);
+  return body.result;
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {

@@ -64,7 +64,13 @@ export type ProviderHealthState =
   | "UNHEALTHY"
   | "OPEN"
   | "HALF_OPEN"
-  | "RECOVERING";
+  | "RECOVERING"
+  | "ACCESS_DENIED"
+  | "RATE_LIMITED"
+  | "AUTH_FAILED"
+  | "TIMEOUT"
+  | "NETWORK_ERROR"
+  | "UNKNOWN";
 
 export interface Provenance {
   source: EvidenceSource;

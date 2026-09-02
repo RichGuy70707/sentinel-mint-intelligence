@@ -246,17 +246,27 @@ function latencyByChain(
   errors: { chainKey: string }[],
 ): Record<string, { ms: number | null; ok: boolean }> {
   const out: Record<string, { ms: number | null; ok: boolean }> = {};
+  const usable = new Set(["HEALTHY", "DEGRADED", "RECOVERING"]);
   for (const p of providers) {
     const prev = out[p.chainKey];
-    const ok = p.state === "HEALTHY" || p.state === "DEGRADED" || p.state === "RECOVERING";
-    const ms = p.latencyMs;
-    if (!prev || (ms != null && (prev.ms == null || ms < prev.ms))) {
-      out[p.chainKey] = { ms, ok: prev?.ok === false ? false : ok };
+    const ok = usable.has(p.state);
+    const ms = ok ? p.latencyMs : null;
+    if (!prev) {
+      out[p.chainKey] = { ms, ok };
+      continue;
+    }
+    if (ok && !prev.ok) {
+      out[p.chainKey] = { ms, ok: true };
+      continue;
+    }
+    if (ok && ms != null && (prev.ms == null || ms < prev.ms)) {
+      out[p.chainKey] = { ms, ok: true };
     }
   }
   for (const e of errors) {
-    const prev = out[e.chainKey] ?? { ms: null, ok: true };
-    out[e.chainKey] = { ...prev, ok: false };
+    const prev = out[e.chainKey];
+    if (prev?.ok) continue;
+    out[e.chainKey] = { ms: prev?.ms ?? null, ok: false };
   }
   return out;
 }

@@ -48,7 +48,11 @@ function Section({
   rows,
 }: {
   title: string;
-  rows: ReturnType<typeof listShape>;
+  rows: Array<{
+    project: import("@/core/types").ProjectModel;
+    result: import("@/core/types").EligibilityResult;
+    stage: import("@/core/types").StageModel | null;
+  }>;
 }) {
   if (!rows.length) return null;
   return (

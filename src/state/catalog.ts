@@ -101,12 +101,14 @@ export function catalogPhase(state: {
   errors: { chainKey: string }[];
 }): TerminalPhase {
   const liveCount = state.projects.filter((p) => p.status === "LIVE").length;
+  const covered = new Set(state.projects.map((p) => p.chainKey));
+  const materialErrors = state.errors.filter((e) => !covered.has(e.chainKey as typeof state.projects[number]["chainKey"])).length;
   return deriveTerminalPhase({
     scanning: state.scanning,
     sessionFresh: state.sessionFresh,
     scanFailed: state.scanFailed,
     liveCount,
-    errorCount: state.errors.length,
+    errorCount: materialErrors,
     chainCount: DISCOVERY_CHAIN_COUNT,
   });
 }

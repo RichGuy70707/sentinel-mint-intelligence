@@ -1,6 +1,15 @@
+import { classifyFailure, opensCircuitImmediately, type TransportCause } from "./classify.ts";
 import { sanitizeProviderText } from "./sanitize.ts";
 
-export type SlotHealth = "RECOVERING" | "HEALTHY" | "UNHEALTHY" | "OPEN" | "HALF_OPEN";
+export type SlotHealth =
+  | "RECOVERING"
+  | "HEALTHY"
+  | "UNHEALTHY"
+  | "OPEN"
+  | "HALF_OPEN"
+  | "ACCESS_DENIED"
+  | "RATE_LIMITED"
+  | "AUTH_FAILED";
 
 interface Slot {
   id: string;
@@ -11,6 +20,7 @@ interface Slot {
   lastError: string | null;
   lastSuccessAt: number | null;
   circuit: "CLOSED" | "OPEN" | "HALF_OPEN";
+  lastCause: TransportCause | null;
 }
 
 const OPEN_AFTER = 3;
@@ -30,6 +40,7 @@ export class KeyPool {
       lastError: null,
       lastSuccessAt: null,
       circuit: "CLOSED" as const,
+      lastCause: null,
     }));
   }
 
@@ -69,7 +80,7 @@ export class KeyPool {
     const now = Date.now();
     const open = this.slots.filter((s) => {
       if (s.circuit === "OPEN") {
-        if (s.openedAt != null && now - s.openedAt >= OPEN_MS) {
+        if (s.openedAt != null && now - s.openedAt >= (s.lastCause && opensCircuitImmediately(s.lastCause) ? 120_000 : OPEN_MS)) {
           s.circuit = "HALF_OPEN";
           return true;
         }
@@ -88,14 +99,17 @@ export class KeyPool {
     s.failures = 0;
     s.lastSuccessAt = Date.now();
     s.lastError = null;
+    s.lastCause = null;
     s.circuit = "CLOSED";
     s.openedAt = null;
   }
 
   private recordFailure(s: Slot, err: unknown) {
+    const cause = classifyFailure(err);
     s.failures += 1;
+    s.lastCause = cause;
     s.lastError = err instanceof Error ? err.message : String(err);
-    if (s.circuit === "HALF_OPEN" || s.failures >= OPEN_AFTER) {
+    if (s.circuit === "HALF_OPEN" || s.failures >= OPEN_AFTER || opensCircuitImmediately(cause)) {
       s.circuit = "OPEN";
       s.openedAt = Date.now();
     }
@@ -103,6 +117,9 @@ export class KeyPool {
 }
 
 function classify(s: Slot): SlotHealth {
+  if (s.lastCause === "ACCESS_DENIED") return "ACCESS_DENIED";
+  if (s.lastCause === "AUTH_FAILED") return "AUTH_FAILED";
+  if (s.lastCause === "RATE_LIMITED") return "RATE_LIMITED";
   if (s.circuit === "OPEN") return "OPEN";
   if (s.circuit === "HALF_OPEN") return "HALF_OPEN";
   if (s.failures > 0 && s.successes === 0) return "UNHEALTHY";
