@@ -60,7 +60,11 @@ export function sanitizeProject(project: ProjectModel): ProjectModel {
   return {
     ...project,
     stages,
-    status: resolveMintStatus(stages, { minted: project.minted }),
+    status: resolveMintStatus(stages, {
+      minted: project.minted,
+      windowMints: project.windowMints ?? 0,
+      supply: project.supply,
+    }),
   };
 }
 
@@ -78,6 +82,7 @@ function dedupeProjects(projects: ProjectModel[]): ProjectModel[] {
       ...p,
       name: looksLikeAddress(p.name) && !looksLikeAddress(prev.name) ? prev.name : p.name,
       minted: Math.max(prev.minted ?? 0, p.minted ?? 0),
+      windowMints: Math.max(prev.windowMints ?? 0, p.windowMints ?? 0),
       uniqueMinters: Math.max(prev.uniqueMinters ?? 0, p.uniqueMinters ?? 0),
       mintVelocityPerMin: Math.max(prev.mintVelocityPerMin ?? 0, p.mintVelocityPerMin ?? 0),
       supply: p.supply ?? prev.supply,

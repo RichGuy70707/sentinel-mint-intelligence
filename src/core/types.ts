@@ -123,6 +123,7 @@ export interface ProjectModel {
   supply: number | null;
   remaining: number | null;
   minted: number | null;
+  windowMints?: number | null;
   priceWei: string | null;
   status: MintStatus;
   detectedAt: number;

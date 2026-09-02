@@ -118,7 +118,7 @@ export function DiscoveryBoard({ mode }: { mode: BoardMode }) {
         )}
         <RailHeader title="New Mints" count={fresh.length} scanning={scanning} />
         <p className="border-b border-line px-2 py-0.5 font-mono text-[10px] text-subtle">
-          {mintPerSec} MINT/S · {scannedAt ? "20s AVG" : "—"}
+          {mintPerSec} MINT/S · {scannedAt ? "POLL 20s" : "—"}
         </p>
         {fresh.length === 0 ? (
           <p className="px-2 py-2 text-[11px] text-subtle">Waiting for new mints...</p>

@@ -111,11 +111,16 @@ export function stagePhase(stage: StageModel, now = Date.now()): "completed" | "
 
 export function resolveMintStatus(
   stages: { startTime: number | null; endTime: number | null }[],
-  activity: { minted?: number | null },
+  activity: { minted?: number | null; windowMints?: number | null; supply?: number | null },
   now = Date.now(),
 ): "UPCOMING" | "LIVE" | "ENDED" | "UNKNOWN" {
   const fromStages = classifyMintStatus(stages, now);
+  const supply = activity.supply;
+  const total = activity.minted;
+  if (supply != null && supply > 0 && total != null && total >= supply && fromStages !== "UPCOMING") {
+    return "ENDED";
+  }
   if (fromStages !== "UNKNOWN") return fromStages;
-  if ((activity.minted ?? 0) > 0) return "LIVE";
+  if ((activity.windowMints ?? 0) > 0) return "LIVE";
   return "UNKNOWN";
 }

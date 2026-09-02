@@ -22,8 +22,24 @@ describe("stage derivation", () => {
     assert.equal(stages[0]?.requiresVerification, true);
   });
 
-  it("keeps LIVE from mint activity when the sale window is unread", () => {
-    assert.equal(resolveMintStatus([{ startTime: null, endTime: null }], { minted: 12 }), "LIVE");
-    assert.equal(resolveMintStatus([{ startTime: null, endTime: null }], { minted: 0 }), "UNKNOWN");
+  it("marks LIVE from window mint activity only when the sale window is unread", () => {
+    assert.equal(resolveMintStatus([{ startTime: null, endTime: null }], { windowMints: 12 }), "LIVE");
+    assert.equal(resolveMintStatus([{ startTime: null, endTime: null }], { minted: 12, windowMints: 0 }), "UNKNOWN");
+    assert.equal(resolveMintStatus([{ startTime: null, endTime: null }], { minted: 0, windowMints: 0 }), "UNKNOWN");
+  });
+
+  it("does not call a future-window collection LIVE just because totalSupply is positive", () => {
+    const start = Date.now() + 86_400_000;
+    assert.equal(
+      resolveMintStatus([{ startTime: start, endTime: start + 3_600_000 }], { minted: 500, windowMints: 2 }),
+      "UPCOMING",
+    );
+  });
+
+  it("marks sold-out collections ENDED when supply is evidenced", () => {
+    assert.equal(
+      resolveMintStatus([{ startTime: null, endTime: null }], { minted: 100, windowMints: 4, supply: 100 }),
+      "ENDED",
+    );
   });
 });

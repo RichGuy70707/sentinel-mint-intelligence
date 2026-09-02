@@ -10,6 +10,7 @@ import { ethBlockNumber, ethGetLogs, type LogEntry } from "@/providers/rpc";
 import { intelCache } from "@/providers/ttl-cache";
 import { deriveStagesFromIntel, resolveMintStatus } from "@/stages/engine";
 import { isProtocolReceiptNft, receiptLabel } from "./noise";
+import { dedupeMintLogs, saneSupply, velocityPerMin } from "./activity";
 
 const SCAN_BLOCKS: Record<ChainKey, number> = {
   eth: 48,
@@ -176,7 +177,7 @@ interface Agg {
 
 function aggregateLogs(chainKey: ChainKey, logs: LogEntry[], scannedAt: number): ProjectModel[] {
   const map = new Map<string, Agg>();
-  for (const log of logs) {
+  for (const log of dedupeMintLogs(logs)) {
     const contract = normalizeAddress(log.address);
     const to = topicAddress(log.topics[2] ?? log.topics[3]);
     const current = map.get(contract) ?? {
@@ -222,7 +223,7 @@ function aggregateBlockscout(chainKey: ChainKey, items: BlockscoutTransfer[], sc
     map.set(contract, current);
   }
   return [...map.values()].map((agg) =>
-    projectFromAgg(agg, scannedAt, 3, "Blockscout token-transfers (minting / from-zero)"),
+    projectFromAgg(agg, scannedAt, null, "Blockscout token-transfers (minting / from-zero)"),
   );
 }
 
@@ -251,7 +252,7 @@ function looksLikeAddress(name: string): boolean {
   return name.startsWith("0x") || name.includes("…");
 }
 
-function projectFromAgg(agg: Agg, scannedAt: number, windowMin: number, note: string): ProjectModel {
+function projectFromAgg(agg: Agg, scannedAt: number, windowMin: number | null, note: string): ProjectModel {
   const provenance: Provenance = {
     source: "ON_CHAIN",
     quality: "LIVE",
@@ -265,7 +266,6 @@ function projectFromAgg(agg: Agg, scannedAt: number, windowMin: number, note: st
     publicStart: null,
     priceWei: null,
   });
-  const minted = agg.mints;
   return {
     id: `${agg.chainKey}:${agg.contract}`,
     chainKey: agg.chainKey,
@@ -278,14 +278,15 @@ function projectFromAgg(agg: Agg, scannedAt: number, windowMin: number, note: st
     imageUrl: null,
     links: [{ label: "Explorer", href: `${CHAINS[agg.chainKey].explorerAddress}${agg.contract}` }],
     stages,
-    supply: Number.isFinite(agg.supplyHint ?? NaN) ? agg.supplyHint! : null,
+    supply: saneSupply(agg.supplyHint ?? null),
     remaining: null,
-    minted,
+    minted: agg.mints,
+    windowMints: agg.mints,
     priceWei: null,
     status: "UNKNOWN",
     detectedAt: scannedAt,
     lastActivityAt: scannedAt,
-    mintVelocityPerMin: Number((agg.mints / windowMin).toFixed(2)),
+    mintVelocityPerMin: velocityPerMin(agg.mints, windowMin),
     uniqueMinters: agg.minters.size,
     verifiedSource: false,
     bytecodePresent: null,
@@ -327,8 +328,9 @@ async function enrichProject(p: ProjectModel): Promise<ProjectModel> {
       seadrop: sale.seadrop,
       merkleRoot: sale.merkleRoot,
     });
-    const minted = intel.totalSupply ? Number(intel.totalSupply) : p.minted;
-    const supply = intel.maxSupply ? Number(intel.maxSupply) : p.supply;
+    const windowMints = p.minted ?? 0;
+    const minted = saneSupply(intel.totalSupply ? Number(intel.totalSupply) : windowMints) ?? windowMints;
+    const supply = saneSupply(intel.maxSupply ? Number(intel.maxSupply) : p.supply);
     return {
       ...p,
       name: intel.name || alchemy.name || p.name,
@@ -336,13 +338,14 @@ async function enrichProject(p: ProjectModel): Promise<ProjectModel> {
       supply,
       remaining: supply != null && minted != null ? Math.max(0, supply - minted) : null,
       minted,
+      windowMints,
       priceWei,
       bytecodePresent: intel.bytecodePresent,
       contractType: intel.contractType || alchemy.tokenType,
       interfaces: intel.interfaces,
       verifiedSource: intel.interfaces.includes("ERC721") || intel.interfaces.includes("ERC1155"),
       stages,
-      status: resolveMintStatus(stages, { minted }),
+      status: resolveMintStatus(stages, { minted, windowMints, supply }),
       deployer: sale.owner,
       saleSource: sale.source === "none" ? null : sale.source,
       market,
@@ -351,7 +354,7 @@ async function enrichProject(p: ProjectModel): Promise<ProjectModel> {
         ...(priceWei == null ? ["Mint price not exposed as a standard view"] : []),
         ...(sale.seadrop ? [] : ["Mechanism derived from live mint logs"]),
         ...(sale.merkleRoot ? ["Non-zero merkle root — allowlist proof unavailable"] : []),
-        ...(market ? [] : ["OpenSea market unread — key missing or collection unindexed"]),
+        ...(market?.quality === "LIVE" ? [] : ["OpenSea market unread — collection unindexed or no stats"]),
       ],
       description: `${intel.name || alchemy.name || p.name} on ${CHAINS[p.chainKey].name}. ${sale.source !== "none" ? `Price source: ${sale.source}.` : "Price not readable on-chain."}`,
     };

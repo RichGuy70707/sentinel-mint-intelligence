@@ -1,7 +1,7 @@
 import { formatEther } from "viem";
 
 export function formatEth(wei: string | null | undefined): string {
-  if (wei == null) return "Unknown";
+  if (wei == null) return "—";
   try {
     const v = formatEther(BigInt(wei));
     if (v === "0") return "Free";
