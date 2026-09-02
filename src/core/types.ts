@@ -148,6 +148,8 @@ export interface MarketSnapshot {
   floorWei: string | null;
   floorChangePct: number | null;
   sales: number | null;
+  imageUrl?: string | null;
+  collectionName?: string | null;
   quality: DataQuality;
   provenance: Provenance;
 }

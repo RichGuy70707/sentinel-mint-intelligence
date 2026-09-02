@@ -42,14 +42,25 @@ export async function openSeaMarket(chainKey: ChainKey, address: string): Promis
       if (!res.ok) {
         return empty("UNKNOWN", `OpenSea contract lookup ${res.status}`);
       }
-      const body = (await res.json()) as { collection?: string };
+      const body = (await res.json()) as {
+        collection?: string;
+        name?: string;
+        image_url?: string;
+        imageUrl?: string;
+      };
       const slug = body.collection;
       if (!slug) return empty("UNKNOWN", "Contract has no OpenSea collection slug");
       const statsRes = await fetch(`https://api.opensea.io/api/v2/collections/${slug}/stats`, {
         headers: { accept: "application/json", "x-api-key": key },
       });
       if (isRetryableProviderStatus(statsRes.status)) throw new Error(`OpenSea stats HTTP ${statsRes.status}`);
-      if (!statsRes.ok) return empty("UNKNOWN", `Collection ${slug} stats unavailable (${statsRes.status})`);
+      if (!statsRes.ok) {
+        return {
+          ...empty("UNKNOWN", `Collection ${slug} stats unavailable (${statsRes.status})`),
+          collectionName: body.name ?? null,
+          imageUrl: body.image_url ?? body.imageUrl ?? null,
+        };
+      }
       const stats = (await statsRes.json()) as {
         total?: { volume?: number; sales?: number; floor_price?: number };
       };
@@ -60,6 +71,8 @@ export async function openSeaMarket(chainKey: ChainKey, address: string): Promis
         floorWei: floorEth != null ? BigInt(Math.round(floorEth * 1e18)).toString() : null,
         floorChangePct: null,
         sales: stats.total?.sales ?? null,
+        collectionName: body.name ?? null,
+        imageUrl: body.image_url ?? body.imageUrl ?? null,
         quality: floorEth != null || volumeEth != null ? "LIVE" : "UNKNOWN",
         provenance: {
           source: "OPEN_SEA_API",
@@ -82,6 +95,8 @@ function empty(quality: MarketSnapshot["quality"], note: string): MarketSnapshot
     floorWei: null,
     floorChangePct: null,
     sales: null,
+    imageUrl: null,
+    collectionName: null,
     quality,
     provenance: {
       source: "OPEN_SEA_API",

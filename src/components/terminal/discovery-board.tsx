@@ -72,7 +72,7 @@ export function DiscoveryBoard({ mode }: { mode: BoardMode }) {
 
   const left = useMemo(() => sortForMode(filtered, mode), [filtered, mode]);
   const selected = left.find((p) => p.id === selectedId) ?? left[0] ?? null;
-  const trending = [...filtered].sort((a, b) => (b.mintVelocityPerMin ?? 0) - (a.mintVelocityPerMin ?? 0)).slice(0, 10);
+  const trending = [...filtered].sort((a, b) => (b.mintVelocityPerMin ?? -1) - (a.mintVelocityPerMin ?? -1)).slice(0, 10);
   const fresh = [...filtered].sort((a, b) => (b.detectedAt ?? 0) - (a.detectedAt ?? 0)).slice(0, 10);
   const runners = [...filtered]
     .sort((a, b) => runnerScore(b) - runnerScore(a))

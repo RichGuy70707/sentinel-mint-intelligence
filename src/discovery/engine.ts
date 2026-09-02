@@ -12,6 +12,7 @@ import { deriveStagesFromIntel, resolveMintStatus } from "@/stages/engine";
 import { classifyTransferLog, ERC1155_TRANSFER_BATCH } from "./mint-logs";
 import { isFungibleToken, keepMintCandidate } from "./token-class";
 import { isProtocolReceiptNft, receiptLabel } from "./noise";
+import { preferName, reconcileSupply } from "./quality";
 import { dedupeMintLogs, saneSupply, velocityPerMin } from "./activity";
 
 const SCAN_BLOCKS: Record<ChainKey, number> = {
@@ -356,13 +357,16 @@ async function enrichProject(p: ProjectModel): Promise<ProjectModel> {
       seadrop: sale.seadrop,
       merkleRoot: sale.merkleRoot,
     });
-    const windowMints = p.minted ?? 0;
-    const minted = saneSupply(intel.totalSupply ? Number(intel.totalSupply) : windowMints) ?? windowMints;
-    const supply = saneSupply(intel.maxSupply ? Number(intel.maxSupply) : p.supply);
+    const windowMints = p.windowMints ?? p.minted ?? 0;
+    const rawMinted = saneSupply(intel.totalSupply ? Number(intel.totalSupply) : windowMints) ?? windowMints;
+    const rawSupply = saneSupply(intel.maxSupply ? Number(intel.maxSupply) : p.supply);
+    const { minted, supply } = reconcileSupply(rawMinted, rawSupply);
     return {
       ...p,
-      name: pickProjectName(intel.name, alchemy.name, p.name),
+      name: preferName(intel.name, alchemy.name, market?.collectionName, p.name),
       symbol: intel.symbol || alchemy.symbol || p.symbol,
+      imageUrl: market?.imageUrl || p.imageUrl,
+      collectionSlug: p.collectionSlug,
       supply,
       remaining: supply != null && minted != null ? Math.max(0, supply - minted) : null,
       minted,
@@ -400,14 +404,6 @@ function keepDiscovered(p: ProjectModel): boolean {
     interfaces: p.interfaces,
     nftEventEvidence: p.verifiedSource || p.interfaces.includes("ERC721") || p.interfaces.includes("ERC1155"),
   });
-}
-
-function pickProjectName(...names: Array<string | null | undefined>): string {
-  for (const name of names) {
-    const trimmed = name?.trim();
-    if (trimmed && !looksLikeAddress(trimmed) && trimmed !== "UNKNOWN PROJECT") return trimmed;
-  }
-  return "UNKNOWN PROJECT";
 }
 
 function hex(n: number): string {

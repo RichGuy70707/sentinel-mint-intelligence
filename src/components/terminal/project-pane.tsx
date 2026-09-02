@@ -176,7 +176,19 @@ export function ProjectPane({ project }: { project: ProjectModel | null }) {
     <div className="flex h-full flex-col overflow-auto">
       <div className="flex items-start justify-between gap-3 border-b border-line px-3 py-2">
         <div className="min-w-0">
-          <h2 className="truncate text-base font-medium tracking-tight">{project.name}</h2>
+          <div className="flex items-center gap-2">
+            {project.imageUrl ? (
+              <img
+                src={project.imageUrl}
+                alt=""
+                className="h-5 w-5 shrink-0 rounded-sm object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+            ) : null}
+            <h2 className="truncate text-base font-medium tracking-tight">{project.name}</h2>
+          </div>
           <div className="mt-1 flex flex-wrap items-center gap-1">
             <ChainBadge chain={project.chainKey} />
             <StatusBadge status={project.status} />
@@ -196,7 +208,14 @@ export function ProjectPane({ project }: { project: ProjectModel | null }) {
 
       <div className="grid grid-cols-4 gap-px border-b border-line bg-line">
         <Metric label="Price" value={formatEth(project.priceWei ?? stage?.priceWei)} />
-        <Metric label="Minted" value={`${formatInt(project.minted)}${supply != null ? `/${formatInt(supply)}` : ""}`} />
+        <Metric
+          label="Minted"
+          value={
+            supply != null
+              ? `${formatInt(minted)}/${formatInt(supply)}`
+              : formatInt(minted)
+          }
+        />
         <Metric label="Vel" value={project.mintVelocityPerMin == null ? "—" : `${project.mintVelocityPerMin}/m`} />
         <Metric label="Unique" value={formatInt(project.uniqueMinters)} />
       </div>
@@ -218,7 +237,7 @@ export function ProjectPane({ project }: { project: ProjectModel | null }) {
         <KV k="Mint" v={project.mintMethod ?? "UNKNOWN"} />
         <KV k="Stage" v={stage ? `${stage.label} · ${stagePhase(stage)}` : "UNKNOWN"} />
         <KV k="Window" v={`${formatWhen(stage?.startTime ?? null)} → ${formatWhen(stage?.endTime ?? null)}`} />
-        <KV k="Source" v={`${project.provenance.source}`} />
+        <KV k="Activity" v={project.windowMints != null ? formatInt(project.windowMints) : "—"} />
       </div>
 
       <div className="grid grid-cols-3 gap-x-4 border-b border-line px-3 py-2 text-[11px]">

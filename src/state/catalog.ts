@@ -4,6 +4,8 @@ import { normalizeTimestamp } from "@/core/time";
 import { deriveTerminalPhase, DISCOVERY_CHAIN_COUNT, type TerminalPhase } from "@/core/terminal";
 import type { ChainKey, MintStatus, ProjectModel, StageKind, SystemHealth } from "@/core/types";
 import { resolveMintStatus } from "@/stages/engine";
+import { reconcileSupply } from "@/discovery/quality";
+import { isProtocolReceiptNft } from "@/discovery/noise";
 
 export type SignalKey = "myEligible" | "readyToMint" | "requiresVerification" | "unknownEligibility";
 
@@ -57,13 +59,17 @@ export function sanitizeProject(project: ProjectModel): ProjectModel {
     startTime: normalizeTimestamp(s.startTime),
     endTime: normalizeTimestamp(s.endTime),
   }));
+  const { minted, supply } = reconcileSupply(project.minted, project.supply);
   return {
     ...project,
     stages,
+    minted,
+    supply,
+    remaining: supply != null && minted != null ? Math.max(0, supply - minted) : null,
     status: resolveMintStatus(stages, {
-      minted: project.minted,
+      minted,
       windowMints: project.windowMints ?? 0,
-      supply: project.supply,
+      supply,
     }),
   };
 }
@@ -190,7 +196,7 @@ export const useCatalog = create<CatalogState>()(
       setGasGwei: (gasGwei) => set({ gasGwei }),
     }),
     {
-      name: "sentinel.catalog.v3",
+      name: "sentinel.catalog.v4",
       partialize: (s) => ({
         projects: s.projects,
         scannedAt: s.scannedAt,
@@ -202,7 +208,7 @@ export const useCatalog = create<CatalogState>()(
         state.sessionFresh = false;
         state.scanFailed = false;
         state.scanning = false;
-        state.projects = state.projects.map(sanitizeProject);
+        state.projects = state.projects.map(sanitizeProject).filter((p) => !isProtocolReceiptNft(p));
       },
     },
   ),
