@@ -33,4 +33,14 @@ describe("mint log classification", () => {
     assert.equal(r.kind, "erc1155");
     assert.equal(r.quantity, 10);
   });
+
+  it("rejects implausible ERC-1155 quantities as non-mint evidence", () => {
+    const value = `0x${"0".repeat(64)}${BigInt(1_000_000).toString(16).padStart(64, "0")}`;
+    const r = classifyTransferLog({
+      topics: [ERC1155_TRANSFER_SINGLE, zero, zero, to],
+      data: value,
+    });
+    assert.equal(r.kind, "unknown");
+    assert.equal(r.quantity, 0);
+  });
 });

@@ -29,16 +29,18 @@ export function topicToAddress(topic: string | undefined): string | null {
 export function classifyTransferLog(log: { topics: string[]; data?: string }): ClassifiedMintLog {
   const sig = normTopic(log.topics[0]);
   if (sig === ERC1155_TRANSFER_SINGLE) {
+    const quantity = saneMintQuantity(decodeUintPair(log.data).value);
     return {
-      kind: "erc1155",
-      quantity: decodeUintPair(log.data).value,
+      kind: quantity > 0 ? "erc1155" : "unknown",
+      quantity,
       recipient: topicToAddress(log.topics[3]),
     };
   }
   if (sig === ERC1155_TRANSFER_BATCH) {
+    const quantity = saneMintQuantity(decodeBatchQuantity(log.data));
     return {
-      kind: "erc1155",
-      quantity: decodeBatchQuantity(log.data),
+      kind: quantity > 0 ? "erc1155" : "unknown",
+      quantity,
       recipient: topicToAddress(log.topics[3]),
     };
   }
@@ -51,9 +53,10 @@ export function classifyTransferLog(log: { topics: string[]; data?: string }): C
   return { kind: "unknown", quantity: 0, recipient: null };
 }
 
-export function isNftMintLog(log: { topics: string[]; data?: string }): boolean {
-  const kind = classifyTransferLog(log).kind;
-  return kind === "erc721" || kind === "erc1155";
+export function saneMintQuantity(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  if (value > 10_000) return 0;
+  return Math.floor(value);
 }
 
 function decodeUintPair(data: string | undefined): { id: number; value: number } {
