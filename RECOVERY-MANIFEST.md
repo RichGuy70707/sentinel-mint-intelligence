@@ -24,3 +24,13 @@
 - Non-zero `merkleRoot` marks REQUIRES_PROOF — never invented as ELIGIBLE
 - Discovery no longer fabricates `scannedAt - 60s` as a mint start
 - LIVE status may come from evidenced mint Transfers when the sale window is unread
+
+## Live terminal stabilization (2026-09-02)
+
+- Header phase is derived: IDLE / SCANNING / LIVE / EMPTY / DEGRADED / ERROR
+- LIVE requires a session-fresh completed scan with evidenced live projects
+- Persisted catalog cannot drive LIVE (sessionFresh is not persisted)
+- Failed/timed-out scans keep cached rows and never stamp LIVE
+- ProjectPane hint effect is referentially stable (no setState-on-empty loop)
+- Per-chain discovery budget 12s; client scan budget 22s
+- Watchlist cache is not merged into scan results (prevents stale LIVE)
